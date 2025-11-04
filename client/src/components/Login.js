@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import LoginDoodles from './LoginDoodles';
 import './Login.css';
 
 const Login = () => {
@@ -10,6 +11,11 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [isLookingAtButton, setIsLookingAtButton] = useState(false);
+  const [isShakingHead, setIsShakingHead] = useState(false);
+  const [isNodding, setIsNodding] = useState(false);
+  const [isLookingAway, setIsLookingAway] = useState(false);
   const { login, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -27,17 +33,35 @@ const Login = () => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setIsLookingAtButton(true);
+    setIsShakingHead(false);
+    setIsNodding(false);
 
     const result = await login(username, password);
     
     if (result.success) {
-      navigate('/');
+      setIsNodding(true);
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
     } else {
       setError(result.message);
+      setIsShakingHead(true);
+      setTimeout(() => {
+        setIsShakingHead(false);
+        setIsLookingAtButton(false);
+      }, 2000);
     }
     
     setLoading(false);
+    setTimeout(() => {
+      setIsLookingAtButton(false);
+    }, 3000);
   };
+
+  useEffect(() => {
+    setIsLookingAway(passwordVisible);
+  }, [passwordVisible]);
 
   return (
     <div className="login-container">
@@ -91,13 +115,23 @@ const Login = () => {
 
           <div className="form-group">
             <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Enter password"
-            />
+            <div className="password-input-wrapper">
+              <input
+                type={passwordVisible ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="Enter password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setPasswordVisible(!passwordVisible)}
+                aria-label={passwordVisible ? "Hide password" : "Show password"}
+              >
+                {passwordVisible ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
 
           <motion.button
@@ -126,6 +160,14 @@ const Login = () => {
           </motion.button>
         </form>
       </motion.div>
+      <LoginDoodles
+        isWatching={true}
+        isLookingAtButton={isLookingAtButton}
+        isShakingHead={isShakingHead}
+        isNodding={isNodding}
+        isLookingAway={isLookingAway}
+        passwordVisible={passwordVisible}
+      />
     </div>
   );
 };
