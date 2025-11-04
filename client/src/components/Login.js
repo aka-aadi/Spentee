@@ -53,7 +53,17 @@ const Login = () => {
           transition={{ delay: 0.2, type: 'spring' }}
           className="login-header"
         >
-          <h1>💰 Spentee</h1>
+          <img 
+            src="/logo512.png" 
+            alt="Spentee Logo" 
+            className="login-logo"
+            onError={(e) => {
+              // Fallback to text if logo not found
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          <h1 style={{ display: 'none' }}>💰 Spentee</h1>
           <p>Manage all your money with ease</p>
         </motion.div>
 
