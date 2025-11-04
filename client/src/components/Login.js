@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import ButtonParticles from './ButtonParticles';
 import './Login.css';
 
 const Login = () => {
@@ -10,6 +11,8 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isButtonHovered, setIsButtonHovered] = useState(false);
+  const [isButtonClicked, setIsButtonClicked] = useState(false);
   const { login, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -105,8 +108,15 @@ const Login = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="login-button"
+            onMouseEnter={() => setIsButtonHovered(true)}
+            onMouseLeave={() => setIsButtonHovered(false)}
+            onMouseDown={() => setIsButtonClicked(true)}
+            onMouseUp={() => setIsButtonClicked(false)}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            <ButtonParticles isHovered={isButtonHovered} isClicked={isButtonClicked} />
+            <span className="button-text">
+              {loading ? 'Logging in...' : 'Login'}
+            </span>
           </motion.button>
         </form>
       </motion.div>
