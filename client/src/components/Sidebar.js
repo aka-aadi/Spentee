@@ -87,17 +87,10 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             className="sidebar"
           >
             <div className="sidebar-header">
-              <img 
-                src="/logo192.png" 
-                alt="Spentee Logo" 
-                className="sidebar-logo"
-                onError={(e) => {
-                  // Fallback to text if logo not found
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'block';
-                }}
-              />
-              <h2 style={{ display: 'none' }}>💰 Spentee</h2>
+              <h2 className="sidebar-brand">
+                <span className="brand-icon">S</span>
+                <span className="brand-text">Spentee</span>
+              </h2>
             </div>
 
             <nav className="sidebar-nav">
