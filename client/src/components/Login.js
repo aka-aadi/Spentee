@@ -103,11 +103,26 @@ const Login = () => {
           <motion.button
             type="submit"
             disabled={loading}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             className="login-button"
+            animate={loading ? { opacity: 0.7 } : { opacity: 1 }}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? (
+              <motion.span
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                Logging in...
+              </motion.span>
+            ) : (
+              <motion.span
+                whileHover={{ x: [0, 5, 0] }}
+                transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 2 }}
+              >
+                Login
+              </motion.span>
+            )}
           </motion.button>
         </form>
       </motion.div>
