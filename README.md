@@ -56,19 +56,33 @@ A comprehensive expense tracking and financial management application with a mod
 
 3. **Configure environment variables:**
    
-   Create `server/.env`:
+   Create `server/.env` file:
    ```env
-   MONGODB_URI=your-mongodb-connection-string
-   JWT_SECRET=your-super-secret-jwt-key
+   # MongoDB Connection
+   MONGODB_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/spendee?retryWrites=true&w=majority
+   
+   # JWT Secret (generate a secure random string)
+   # Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+   
+   # Server Port (optional, defaults to 5000)
    PORT=5000
+   
+   # Admin User Configuration
+   # Admin username (optional, defaults to 'admin')
    ADMIN_USERNAME=admin
+   
+   # Admin password (REQUIRED for auto-creating admin user on server start)
+   # IMPORTANT: Use a strong password in production!
    ADMIN_PASSWORD=your-secure-admin-password
    ```
    
-   **Important:** 
-   - `ADMIN_PASSWORD` is required for auto-creating admin user on server start
-   - `ADMIN_USERNAME` is optional (defaults to 'admin')
-   - Never commit `.env` files to version control
+   **Important Security Notes:** 
+   - ✅ `ADMIN_PASSWORD` is required for auto-creating admin user on server start
+   - ✅ `ADMIN_USERNAME` is optional (defaults to 'admin')
+   - ⚠️ **Never commit `.env` files to version control**
+   - ⚠️ **Use strong passwords in production**
+   - ⚠️ **Admin credentials are stored securely in MongoDB (hashed with bcrypt)**
    
    Create `client/.env` (optional):
    ```env
