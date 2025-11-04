@@ -25,27 +25,35 @@ mongoose.connect(MONGODB_URI)
 .then(async () => {
   console.log('MongoDB connected successfully');
   
-  // Auto-initialize admin user on server start
+  // Auto-initialize admin user on server start (if environment variables are set)
   try {
     const User = require('./models/User');
-    const adminExists = await User.findOne({ username: 'admin' });
-    if (!adminExists) {
-      const admin = new User({
-        username: 'admin',
-        password: 'chunguchi',
-        role: 'admin'
-      });
-      await admin.save();
-      console.log('✅ Admin user created with password: chunguchi');
-    } else {
-      // Ensure existing admin has admin role
-      if (adminExists.role !== 'admin') {
-        adminExists.role = 'admin';
-        await adminExists.save();
-        console.log('✅ Admin user role updated to admin');
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    if (adminPassword) {
+      const adminExists = await User.findOne({ username: adminUsername });
+      if (!adminExists) {
+        const admin = new User({
+          username: adminUsername,
+          password: adminPassword,
+          role: 'admin'
+        });
+        await admin.save();
+        console.log(`✅ Admin user "${adminUsername}" created successfully`);
       } else {
-        console.log('ℹ️  Admin user already exists');
+        // Ensure existing admin has admin role
+        if (adminExists.role !== 'admin') {
+          adminExists.role = 'admin';
+          await adminExists.save();
+          console.log(`✅ Admin user "${adminUsername}" role updated to admin`);
+        } else {
+          console.log(`ℹ️  Admin user "${adminUsername}" already exists`);
+        }
       }
+    } else {
+      console.log('ℹ️  ADMIN_PASSWORD not set - skipping admin auto-creation');
+      console.log('   Admin user must be created manually or via /api/auth/init endpoint');
     }
   } catch (error) {
     console.error('Error initializing admin:', error.message);

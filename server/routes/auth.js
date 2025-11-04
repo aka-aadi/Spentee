@@ -8,11 +8,20 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 // Initialize admin user
 router.post('/init', async (req, res) => {
   try {
-    const adminExists = await User.findOne({ username: 'admin' });
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    if (!adminPassword) {
+      return res.status(400).json({ 
+        message: 'Admin password not configured. Please set ADMIN_PASSWORD environment variable.' 
+      });
+    }
+
+    const adminExists = await User.findOne({ username: adminUsername });
     if (!adminExists) {
       const admin = new User({
-        username: 'admin',
-        password: 'chunguchi',
+        username: adminUsername,
+        password: adminPassword,
         role: 'admin'
       });
       await admin.save();

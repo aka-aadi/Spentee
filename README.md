@@ -61,7 +61,14 @@ A comprehensive expense tracking and financial management application with a mod
    MONGODB_URI=your-mongodb-connection-string
    JWT_SECRET=your-super-secret-jwt-key
    PORT=5000
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=your-secure-admin-password
    ```
+   
+   **Important:** 
+   - `ADMIN_PASSWORD` is required for auto-creating admin user on server start
+   - `ADMIN_USERNAME` is optional (defaults to 'admin')
+   - Never commit `.env` files to version control
    
    Create `client/.env` (optional):
    ```env
@@ -83,11 +90,19 @@ A comprehensive expense tracking and financial management application with a mod
    - Web Dashboard: http://localhost:3000
    - API Server: http://localhost:5000
 
-### Default Admin Credentials
-- **Username:** `admin`
-- **Password:** `chunguchi`
+### Admin User Setup
 
-The admin user is automatically created on first server start.
+The admin user is automatically created on server start if `ADMIN_PASSWORD` environment variable is set.
+
+**For first-time setup:**
+1. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `server/.env`
+2. Start the server - admin will be auto-created
+3. Or use the `/api/auth/init` endpoint to create admin manually
+
+**For existing installations:**
+- Admin credentials are stored in MongoDB users collection
+- Login with the credentials that were set when admin was created
+- To reset password, update `ADMIN_PASSWORD` in `.env` and delete existing admin from database, then restart server
 
 ## 📁 Project Structure
 
@@ -130,7 +145,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 1. Set Root Directory to `server`
 2. Set Build Command: `npm install`
 3. Set Start Command: `npm start`
-4. Add environment variables: `MONGODB_URI`, `JWT_SECRET`, `PORT`
+4. Add environment variables:
+   - `MONGODB_URI` (required)
+   - `JWT_SECRET` (required)
+   - `PORT` (optional, defaults to 5000)
+   - `ADMIN_USERNAME` (optional, defaults to 'admin')
+   - `ADMIN_PASSWORD` (required for auto-creating admin)
 
 ### Client Deployment (Netlify)
 1. Set Base Directory to `client`
