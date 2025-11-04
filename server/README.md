@@ -174,7 +174,7 @@ Expected response:
 ```json
 {
   "status": "OK",
-  "message": "Spendee API is running"
+  "message": "SpenTee API is running"
 }
 ```
 
