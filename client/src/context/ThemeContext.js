@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
@@ -11,9 +11,6 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
-  // Always dark mode - no toggle needed
-  const [darkMode] = useState(true);
-
   useEffect(() => {
     // Always apply dark mode
     document.documentElement.classList.add('dark');

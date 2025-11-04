@@ -162,10 +162,7 @@ const EMIs = () => {
 
   // Calculate EMIs due in the current month
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-  const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+  // Note: currentMonth and currentYear were removed as they're only used in commented code
   
   // Find the earliest upcoming EMI to determine next month
   // Don't sort - just find the earliest one while maintaining DB order
@@ -202,13 +199,6 @@ const EMIs = () => {
     // Maintain the original order (no sorting - they're already in creation order)
     totalNextMonth = emisNextMonth.reduce((sum, emi) => sum + emi.monthlyEMI, 0);
   }
-  
-  // EMIs due this month (current calendar month)
-  const emisThisMonth = emis.filter(emi => {
-    const dueDate = new Date(emi.nextDueDate);
-    return dueDate >= firstDayOfMonth && dueDate <= lastDayOfMonth;
-  });
-  const totalThisMonth = emisThisMonth.reduce((sum, emi) => sum + emi.monthlyEMI, 0);
 
   return (
     <motion.div
