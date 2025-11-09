@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "517c0b55-5cac-472c-ae9b-9947a1d6aba3"
+      }
+    },
+    "android": {
+      "package": "com.aka_aadi.spendee"
+    }
+  }
+}
