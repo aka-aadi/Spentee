@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -17,23 +17,7 @@ const Savings = () => {
     date: format(new Date(), 'yyyy-MM-dd')
   });
 
-  useEffect(() => {
-    fetchSavings();
-    fetchAvailableBalance();
-  }, []);
-
-  const fetchSavings = async () => {
-    try {
-      const response = await axios.get('/savings');
-      setSavings(response.data.sort((a, b) => new Date(b.date) - new Date(a.date)));
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching savings:', error);
-      setLoading(false);
-    }
-  };
-
-  const fetchAvailableBalance = async () => {
+  const fetchAvailableBalance = useCallback(async () => {
     try {
       const now = new Date();
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -47,13 +31,29 @@ const Savings = () => {
     } catch (error) {
       console.error('Error fetching available balance:', error);
     }
-  };
+  }, [editingSaving]);
+
+  const fetchSavings = useCallback(async () => {
+    try {
+      const response = await axios.get('/savings');
+      setSavings(response.data.sort((a, b) => new Date(b.date) - new Date(a.date)));
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching savings:', error);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavings();
+    fetchAvailableBalance();
+  }, [fetchSavings, fetchAvailableBalance]);
 
   useEffect(() => {
     if (editingSaving) {
       fetchAvailableBalance();
     }
-  }, [editingSaving]);
+  }, [editingSaving, fetchAvailableBalance]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
