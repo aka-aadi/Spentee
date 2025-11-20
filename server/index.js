@@ -51,6 +51,17 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Request logging middleware (for debugging)
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`, {
+    headers: {
+      'x-session-id': req.headers['x-session-id'],
+      'content-type': req.headers['content-type']
+    }
+  });
+  next();
+});
+
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)
 .then(async () => {
@@ -107,6 +118,21 @@ app.use('/api/financial', require('./routes/financial'));
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Spentee API is running' });
+});
+
+// Error handling middleware - must be after all routes
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  console.error('Error stack:', err.stack);
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ message: 'API endpoint not found' });
 });
 
 const PORT = process.env.PORT || 5000;

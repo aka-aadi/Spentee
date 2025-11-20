@@ -10,7 +10,10 @@ const UPIPayment = require('../models/UPIPayment');
 // Get comprehensive financial summary
 router.get('/summary', authenticate, async (req, res) => {
   try {
+    console.log('Financial summary request from user:', req.user.username);
     const { startDate, endDate } = req.query;
+    console.log('Date range:', { startDate, endDate });
+    
     // Admin users can see all data, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
@@ -19,14 +22,39 @@ router.get('/summary', authenticate, async (req, res) => {
       dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     }
 
+    console.log('Fetching data with query:', JSON.stringify({ ...query, ...dateQuery }));
+
     // Fetch all data
     const [expenses, income, budgets, emis, upiPayments] = await Promise.all([
-      Expense.find({ ...query, ...dateQuery }),
-      Income.find({ ...query, ...dateQuery }),
-      Budget.find({ ...query, isActive: true }),
-      EMI.find({ ...query, isActive: true }),
-      UPIPayment.find({ ...query, ...dateQuery })
+      Expense.find({ ...query, ...dateQuery }).catch(err => {
+        console.error('Error fetching expenses:', err);
+        throw err;
+      }),
+      Income.find({ ...query, ...dateQuery }).catch(err => {
+        console.error('Error fetching income:', err);
+        throw err;
+      }),
+      Budget.find({ ...query, isActive: true }).catch(err => {
+        console.error('Error fetching budgets:', err);
+        throw err;
+      }),
+      EMI.find({ ...query, isActive: true }).catch(err => {
+        console.error('Error fetching EMIs:', err);
+        throw err;
+      }),
+      UPIPayment.find({ ...query, ...dateQuery }).catch(err => {
+        console.error('Error fetching UPI payments:', err);
+        throw err;
+      })
     ]);
+
+    console.log('Data fetched:', {
+      expenses: expenses.length,
+      income: income.length,
+      budgets: budgets.length,
+      emis: emis.length,
+      upiPayments: upiPayments.length
+    });
 
     // Calculate totals
     const totalIncome = income.reduce((sum, inc) => sum + inc.amount, 0);
@@ -149,8 +177,16 @@ router.get('/summary', authenticate, async (req, res) => {
         remainingAfterAll: availableBalance
       }
     });
+    
+    console.log('Financial summary sent successfully');
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching financial summary', error: error.message });
+    console.error('Error in financial summary:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Error fetching financial summary', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
