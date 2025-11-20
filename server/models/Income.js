@@ -4,7 +4,8 @@ const incomeSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   amount: {
     type: Number,
@@ -23,7 +24,8 @@ const incomeSchema = new mongoose.Schema({
   date: {
     type: Date,
     required: true,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   type: {
     type: String,
@@ -33,6 +35,9 @@ const incomeSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Compound indexes for common query patterns
+incomeSchema.index({ userId: 1, date: -1 });
 
 module.exports = mongoose.model('Income', incomeSchema);
 

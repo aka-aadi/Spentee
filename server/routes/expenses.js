@@ -8,7 +8,9 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all expenses, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const expenses = await Expense.find(query).sort({ date: -1 });
+    const expenses = await Expense.find(query)
+      .lean() // Use lean() for read-only queries - much faster
+      .sort({ date: -1 });
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching expenses', error: error.message });
@@ -95,11 +97,18 @@ router.get('/stats/summary', authenticate, async (req, res) => {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
 
-    const expenses = await Expense.find(query);
-    const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    // Use aggregation for faster calculation
+    const [expenses, categoryTotals] = await Promise.all([
+      Expense.find(query).lean(),
+      Expense.aggregate([
+        { $match: query },
+        { $group: { _id: '$category', total: { $sum: '$amount' } } }
+      ])
+    ]);
     
-    const byCategory = expenses.reduce((acc, exp) => {
-      acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+    const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const byCategory = categoryTotals.reduce((acc, item) => {
+      acc[item._id] = item.total;
       return acc;
     }, {});
 

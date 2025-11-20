@@ -24,28 +24,45 @@ router.get('/summary', authenticate, async (req, res) => {
 
     console.log('Fetching data with query:', JSON.stringify({ ...query, ...dateQuery }));
 
-    // Fetch all data
+    // Fetch all data in parallel with optimized queries
+    // Use .lean() for read-only queries (faster, returns plain objects)
+    // Use .select() to only fetch needed fields
     const [expenses, income, budgets, emis, upiPayments] = await Promise.all([
-      Expense.find({ ...query, ...dateQuery }).catch(err => {
-        console.error('Error fetching expenses:', err);
-        throw err;
-      }),
-      Income.find({ ...query, ...dateQuery }).catch(err => {
-        console.error('Error fetching income:', err);
-        throw err;
-      }),
-      Budget.find({ ...query, isActive: true }).catch(err => {
-        console.error('Error fetching budgets:', err);
-        throw err;
-      }),
-      EMI.find({ ...query, isActive: true }).catch(err => {
-        console.error('Error fetching EMIs:', err);
-        throw err;
-      }),
-      UPIPayment.find({ ...query, ...dateQuery }).catch(err => {
-        console.error('Error fetching UPI payments:', err);
-        throw err;
-      })
+      Expense.find({ ...query, ...dateQuery })
+        .lean()
+        .sort({ date: -1 })
+        .catch(err => {
+          console.error('Error fetching expenses:', err);
+          throw err;
+        }),
+      Income.find({ ...query, ...dateQuery })
+        .lean()
+        .sort({ date: -1 })
+        .catch(err => {
+          console.error('Error fetching income:', err);
+          throw err;
+        }),
+      Budget.find({ ...query, isActive: true })
+        .lean()
+        .sort({ createdAt: -1 })
+        .catch(err => {
+          console.error('Error fetching budgets:', err);
+          throw err;
+        }),
+      EMI.find({ ...query, isActive: true })
+        .lean()
+        .sort({ nextDueDate: 1 })
+        .catch(err => {
+          console.error('Error fetching EMIs:', err);
+          throw err;
+        }),
+      UPIPayment.find({ ...query, ...dateQuery })
+        .lean()
+        .sort({ date: -1 })
+        .catch(err => {
+          console.error('Error fetching UPI payments:', err);
+          throw err;
+        })
     ]);
 
     console.log('Data fetched:', {
@@ -110,18 +127,32 @@ router.get('/summary', authenticate, async (req, res) => {
     // Calculate remaining balance (deduct down payments that have been paid)
     const availableBalance = totalIncome - totalExpenses - totalEMI - totalDownPayments - totalUPI;
 
-    // Expenses by category (including EMI and UPI as categories)
-    const expensesByCategory = expenses.reduce((acc, exp) => {
-      acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
-      return acc;
-    }, {});
+    // Use aggregation for faster category calculations
+    const [expenseCategoryTotals, upiCategoryTotals, incomeTypeTotals] = await Promise.all([
+      Expense.aggregate([
+        { $match: { ...query, ...dateQuery } },
+        { $group: { _id: '$category', total: { $sum: '$amount' } } }
+      ]),
+      UPIPayment.aggregate([
+        { $match: { ...query, ...dateQuery, status: 'Success' } },
+        { $group: { _id: '$category', total: { $sum: '$amount' } } }
+      ]),
+      Income.aggregate([
+        { $match: { ...query, ...dateQuery } },
+        { $group: { _id: '$type', total: { $sum: '$amount' } } }
+      ])
+    ]);
+
+    // Build expenses by category
+    const expensesByCategory = {};
+    expenseCategoryTotals.forEach(item => {
+      expensesByCategory[item._id] = item.total;
+    });
     
-    // Add UPI payments by category (they will be merged with expenses of the same category)
-    upiPayments
-      .filter(upi => upi.status === 'Success')
-      .forEach(upi => {
-        expensesByCategory[upi.category] = (expensesByCategory[upi.category] || 0) + upi.amount;
-      });
+    // Add UPI payments by category (merge with expenses)
+    upiCategoryTotals.forEach(item => {
+      expensesByCategory[item._id] = (expensesByCategory[item._id] || 0) + item.total;
+    });
     
     // Add EMI to expenses by category
     if (totalEMI > 0) {
@@ -133,11 +164,11 @@ router.get('/summary', authenticate, async (req, res) => {
       expensesByCategory['Down Payments'] = (expensesByCategory['Down Payments'] || 0) + totalDownPayments;
     }
 
-    // Income by type
-    const incomeByType = income.reduce((acc, inc) => {
-      acc[inc.type] = (acc[inc.type] || 0) + inc.amount;
-      return acc;
-    }, {});
+    // Build income by type
+    const incomeByType = {};
+    incomeTypeTotals.forEach(item => {
+      incomeByType[item._id] = item.total;
+    });
 
     res.json({
       income: {

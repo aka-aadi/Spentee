@@ -8,7 +8,9 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all income, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const income = await Income.find(query).sort({ date: -1 });
+    const income = await Income.find(query)
+      .lean() // Use lean() for read-only queries - much faster
+      .sort({ date: -1 });
     res.json(income);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching income', error: error.message });
@@ -95,11 +97,18 @@ router.get('/stats/summary', authenticate, async (req, res) => {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
 
-    const income = await Income.find(query);
-    const total = income.reduce((sum, inc) => sum + inc.amount, 0);
+    // Use aggregation for faster calculation
+    const [income, typeTotals] = await Promise.all([
+      Income.find(query).lean(),
+      Income.aggregate([
+        { $match: query },
+        { $group: { _id: '$type', total: { $sum: '$amount' } } }
+      ])
+    ]);
     
-    const byType = income.reduce((acc, inc) => {
-      acc[inc.type] = (acc[inc.type] || 0) + inc.amount;
+    const total = income.reduce((sum, inc) => sum + inc.amount, 0);
+    const byType = typeTotals.reduce((acc, item) => {
+      acc[item._id] = item.total;
       return acc;
     }, {});
 

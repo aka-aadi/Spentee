@@ -12,34 +12,53 @@ router.get('/', authenticate, async (req, res) => {
     const budgetQuery = req.user.role === 'admin' 
       ? { isActive: true }
       : { userId: req.user._id, isActive: true };
-    const budgets = await Budget.find(budgetQuery).sort({ createdAt: -1 });
     
-    // Calculate spent amount for each budget (including expenses and UPI payments)
-    const budgetsWithSpent = await Promise.all(budgets.map(async (budget) => {
-      // For admin, get all expenses; for regular users, only their own
-      const expenseQuery = req.user.role === 'admin'
-        ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } }
-        : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
-      const expenses = await Expense.find(expenseQuery);
+    // Fetch budgets with .lean() for better performance
+    const budgets = await Budget.find(budgetQuery)
+      .lean()
+      .sort({ createdAt: -1 });
+    
+    if (budgets.length === 0) {
+      return res.json([]);
+    }
+    
+    // Build base query for expenses and UPI payments
+    const baseQuery = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    
+    // Fetch all expenses and UPI payments once (optimized with .lean())
+    const [allExpenses, allUPIPayments] = await Promise.all([
+      Expense.find(baseQuery).lean().select('category date amount userId'),
+      UPIPayment.find({ ...baseQuery, status: 'Success' }).lean().select('category date amount userId')
+    ]);
+    
+    // Calculate spent amount for each budget (in-memory calculation - much faster)
+    const budgetsWithSpent = budgets.map(budget => {
+      // Filter expenses for this budget's category and date range
+      const budgetExpenses = allExpenses.filter(exp => 
+        exp.category === budget.category &&
+        new Date(exp.date) >= new Date(budget.startDate) &&
+        new Date(exp.date) <= new Date(budget.endDate)
+      );
       
-      // For admin, get all UPI payments; for regular users, only their own
-      const upiQuery = req.user.role === 'admin'
-        ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' }
-        : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
-      const upiPayments = await UPIPayment.find(upiQuery);
+      // Filter UPI payments for this budget's category and date range
+      const budgetUPI = allUPIPayments.filter(upi => 
+        upi.category === budget.category &&
+        new Date(upi.date) >= new Date(budget.startDate) &&
+        new Date(upi.date) <= new Date(budget.endDate)
+      );
       
-      // Calculate total spent from both expenses and UPI payments
-      const expenseTotal = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-      const upiTotal = upiPayments.reduce((sum, upi) => sum + upi.amount, 0);
+      // Calculate totals
+      const expenseTotal = budgetExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+      const upiTotal = budgetUPI.reduce((sum, upi) => sum + upi.amount, 0);
       const spent = expenseTotal + upiTotal;
       
       return {
-        ...budget.toObject(),
+        ...budget,
         spent,
         remaining: budget.amount - spent,
-        percentageUsed: (spent / budget.amount) * 100
+        percentageUsed: budget.amount > 0 ? (spent / budget.amount) * 100 : 0
       };
-    }));
+    });
     
     res.json(budgetsWithSpent);
   } catch (error) {
@@ -63,17 +82,26 @@ router.get('/:id', authenticate, async (req, res) => {
     const expenseQuery = req.user.role === 'admin'
       ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } }
       : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
-    const expenses = await Expense.find(expenseQuery);
+    
+    // Use aggregation for faster calculation
+    const expenseResult = await Expense.aggregate([
+      { $match: expenseQuery },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
     
     // For admin, get all UPI payments; for regular users, only their own
     const upiQuery = req.user.role === 'admin'
       ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' }
       : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
-    const upiPayments = await UPIPayment.find(upiQuery);
     
-    // Calculate total spent from both expenses and UPI payments
-    const expenseTotal = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const upiTotal = upiPayments.reduce((sum, upi) => sum + upi.amount, 0);
+    const upiResult = await UPIPayment.aggregate([
+      { $match: upiQuery },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    
+    // Calculate totals from aggregation results
+    const expenseTotal = expenseResult.length > 0 ? expenseResult[0].total : 0;
+    const upiTotal = upiResult.length > 0 ? upiResult[0].total : 0;
     const spent = expenseTotal + upiTotal;
     
     res.json({

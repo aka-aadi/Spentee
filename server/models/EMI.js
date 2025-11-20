@@ -4,7 +4,8 @@ const emiSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   name: {
     type: String,
@@ -64,7 +65,8 @@ const emiSchema = new mongoose.Schema({
   },
   isActive: {
     type: Boolean,
-    default: true
+    default: true,
+    index: true
   },
   category: {
     type: String,
@@ -78,5 +80,10 @@ const emiSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Compound indexes for common query patterns
+emiSchema.index({ userId: 1, isActive: 1 });
+emiSchema.index({ userId: 1, nextDueDate: 1 });
+emiSchema.index({ userId: 1, startDate: 1 });
 
 module.exports = mongoose.model('EMI', emiSchema);

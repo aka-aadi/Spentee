@@ -4,7 +4,8 @@ const expenseSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   amount: {
     type: Number,
@@ -14,7 +15,8 @@ const expenseSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    index: true
   },
   description: {
     type: String,
@@ -23,7 +25,8 @@ const expenseSchema = new mongoose.Schema({
   date: {
     type: Date,
     required: true,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   type: {
     type: String,
@@ -33,6 +36,10 @@ const expenseSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Compound indexes for common query patterns
+expenseSchema.index({ userId: 1, date: -1 });
+expenseSchema.index({ userId: 1, category: 1, date: -1 });
 
 module.exports = mongoose.model('Expense', expenseSchema);
 

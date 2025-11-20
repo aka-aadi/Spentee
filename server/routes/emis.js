@@ -11,7 +11,9 @@ router.get('/', authenticate, async (req, res) => {
     const query = req.user.role === 'admin'
       ? { isActive: true }
       : { userId: req.user._id, isActive: true };
-    const emis = await EMI.find(query).sort({ createdAt: -1 });
+    const emis = await EMI.find(query)
+      .lean() // Use lean() for read-only queries - much faster
+      .sort({ createdAt: -1 });
     res.json(emis);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching EMIs', error: error.message });

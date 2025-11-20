@@ -8,7 +8,9 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all UPI payments, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const upiPayments = await UPIPayment.find(query).sort({ date: -1 });
+    const upiPayments = await UPIPayment.find(query)
+      .lean() // Use lean() for read-only queries - much faster
+      .sort({ date: -1 });
     res.json(upiPayments);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching UPI payments', error: error.message });
@@ -100,16 +102,30 @@ router.get('/stats/summary', authenticate, async (req, res) => {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
     }
 
-    const upiPayments = await UPIPayment.find(query);
-    const total = upiPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    // Use aggregation for faster calculation
+    const [upiPayments, appTotals, categoryTotals, totalResult] = await Promise.all([
+      UPIPayment.find(query).lean(),
+      UPIPayment.aggregate([
+        { $match: query },
+        { $group: { _id: '$upiApp', total: { $sum: '$amount' } } }
+      ]),
+      UPIPayment.aggregate([
+        { $match: query },
+        { $group: { _id: '$category', total: { $sum: '$amount' } } }
+      ]),
+      UPIPayment.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ])
+    ]);
     
-    const byApp = upiPayments.reduce((acc, payment) => {
-      acc[payment.upiApp] = (acc[payment.upiApp] || 0) + payment.amount;
+    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+    const byApp = appTotals.reduce((acc, item) => {
+      acc[item._id] = item.total;
       return acc;
     }, {});
-
-    const byCategory = upiPayments.reduce((acc, payment) => {
-      acc[payment.category] = (acc[payment.category] || 0) + payment.amount;
+    const byCategory = categoryTotals.reduce((acc, item) => {
+      acc[item._id] = item.total;
       return acc;
     }, {});
 

@@ -42,16 +42,24 @@ const upiPaymentSchema = new mongoose.Schema({
   date: {
     type: Date,
     required: true,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   status: {
     type: String,
     enum: ['Success', 'Pending', 'Failed'],
-    default: 'Success'
+    default: 'Success',
+    index: true
   }
 }, {
   timestamps: true
 });
+
+// Compound indexes for common query patterns
+upiPaymentSchema.index({ userId: 1, date: -1 });
+upiPaymentSchema.index({ userId: 1, status: 1, date: -1 });
+upiPaymentSchema.index({ userId: 1, category: 1, date: -1 });
+upiPaymentSchema.index({ category: 1, date: -1, status: 1 });
 
 module.exports = mongoose.model('UPIPayment', upiPaymentSchema);
 
