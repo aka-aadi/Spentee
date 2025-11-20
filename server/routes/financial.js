@@ -65,7 +65,8 @@ router.get('/summary', authenticate, async (req, res) => {
         .sort({ date: -1 })
         .catch(err => {
           console.error('Error fetching savings:', err);
-          throw err;
+          // Return empty array instead of throwing to prevent server crash
+          return [];
         })
     ]);
 
@@ -119,8 +120,8 @@ router.get('/summary', authenticate, async (req, res) => {
       return sum + Math.max(0, budget.amount - spent);
     }, 0);
 
-    // Calculate total expenses (expenses + down payments + EMIs + UPI payments)
-    const totalAllExpenses = totalExpenses + totalEMI + totalDownPayments + totalUPI;
+    // Calculate total expenses (expenses + down payments + EMIs + UPI payments + savings)
+    const totalAllExpenses = totalExpenses + totalEMI + totalDownPayments + totalUPI + totalSavings;
     
     // Calculate remaining balance (deduct down payments, savings, and all expenses)
     const availableBalance = totalIncome - totalExpenses - totalEMI - totalDownPayments - totalUPI - totalSavings;
@@ -160,6 +161,11 @@ router.get('/summary', authenticate, async (req, res) => {
     // Add Down Payments as a separate category if they exist
     if (totalDownPayments > 0) {
       expensesByCategory['Down Payments'] = (expensesByCategory['Down Payments'] || 0) + totalDownPayments;
+    }
+
+    // Add Savings as a separate category (shown in blue in UI)
+    if (totalSavings > 0) {
+      expensesByCategory['Savings'] = (expensesByCategory['Savings'] || 0) + totalSavings;
     }
 
     // Build income by type
