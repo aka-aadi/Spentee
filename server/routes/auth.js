@@ -106,11 +106,19 @@ router.post('/login', async (req, res) => {
       // Continue anyway - session might still be saved
     }
 
+    // Log cookie information for debugging
+    console.log('Login response - Cookie info:', {
+      sessionId: sessionId,
+      cookieHeader: res.getHeader('Set-Cookie'),
+      cookiesInRequest: req.headers.cookie ? 'present' : 'missing'
+    });
+
     // Return session ID for React Native (since cookies don't work well)
     // Session ID is just an identifier, actual session data stays on server
+    // For web clients, the cookie is automatically set by express-session
     res.json({
       success: true,
-      sessionId: sessionId,
+      sessionId: sessionId, // Also return for web clients in case they need it
       user: {
         id: user._id.toString(),
         username: user.username,
