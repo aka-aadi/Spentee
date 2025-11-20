@@ -27,6 +27,9 @@ axios.interceptors.request.use(
     // Add session ID to headers if available (works for both web and mobile)
     if (sessionIdRef) {
       config.headers['x-session-id'] = sessionIdRef;
+      console.log('Adding session ID to request:', sessionIdRef, 'URL:', config.url);
+    } else {
+      console.log('No session ID available for request:', config.url);
     }
     return config;
   },
