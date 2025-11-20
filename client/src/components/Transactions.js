@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { FiDollarSign, FiCreditCard, FiSmartphone, FiTrendingUp } from 'react-icons/fi';
+import { FiDollarSign, FiCreditCard, FiSmartphone, FiTrendingUp, FiPiggyBank } from 'react-icons/fi';
 import './Transactions.css';
 
 const Transactions = () => {
@@ -25,6 +25,9 @@ const Transactions = () => {
       // Fetch all UPI payments (successful only, all time)
       const upiRes = await axios.get('/upi');
       const upiPayments = upiRes.data.filter(upi => upi.status === 'Success');
+
+      // Fetch savings (all time)
+      const savingsRes = await axios.get('/savings').catch(() => ({ data: [] }));
 
       // Fetch EMIs and get all paid ones (all time)
       const emisRes = await axios.get('/emis');
@@ -108,6 +111,17 @@ const Transactions = () => {
           icon: FiDollarSign,
           color: '#ec4899',
           emiId: emi._id
+        })),
+        ...savingsRes.data.map(saving => ({
+          id: saving._id,
+          type: 'savings',
+          amount: -saving.amount,
+          category: 'Savings',
+          description: saving.description || 'Savings',
+          date: saving.date,
+          createdAt: saving.createdAt || saving.date,
+          icon: FiPiggyBank,
+          color: '#3b82f6'
         }))
       ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by creation timestamp (newest first - reverse order)
 
@@ -174,6 +188,12 @@ const Transactions = () => {
             onClick={() => setFilter('downpayment')}
           >
             Down Payments
+          </button>
+          <button 
+            className={filter === 'savings' ? 'active' : ''}
+            onClick={() => setFilter('savings')}
+          >
+            Savings
           </button>
         </div>
       </div>

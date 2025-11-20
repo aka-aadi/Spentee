@@ -59,7 +59,7 @@ const Dashboard = () => {
         params: { startDate: firstDay.toISOString(), endDate: lastDay.toISOString() }
       });
 
-      const { income, expenses, emis, balance } = financialSummary.data;
+      const { income, expenses, emis, balance, savings } = financialSummary.data;
 
       // Check if any EMI excludes down payment from balance
       const hasExcludedDownPayments = emis.items.some(emi => 
@@ -75,6 +75,7 @@ const Dashboard = () => {
         monthlyEMI: emis.totalMonthly,
         totalDownPayments: balance.totalDownPayments || 0,
         totalUPI: balance.totalUPI || 0,
+        totalSavings: savings?.total || 0,
         availableBalance: balance.availableBalance || 0,
         remainingAfterExpenses: balance.remainingAfterExpenses,
         hasExcludedDownPayments,
@@ -128,6 +129,11 @@ const Dashboard = () => {
           return incDate >= month && incDate <= monthEnd;
         }).reduce((sum, inc) => sum + inc.amount, 0);
 
+        const monthSavings = savings?.items?.filter(saving => {
+          const savingDate = new Date(saving.date);
+          return savingDate >= month && savingDate <= monthEnd;
+        }).reduce((sum, saving) => sum + saving.amount, 0) || 0;
+
         monthlyChartData.push({
           month: format(month, 'MMM'),
           income: monthIncome,
@@ -135,8 +141,9 @@ const Dashboard = () => {
           emi: monthEMI,
           upi: monthUPI,
           downPayments: monthDownPayments,
-          totalOutgoing: monthExpenses + monthEMI + monthUPI + monthDownPayments,
-          savings: monthIncome - monthExpenses - monthEMI - monthUPI - monthDownPayments,
+          savings: monthSavings,
+          totalOutgoing: monthExpenses + monthEMI + monthUPI + monthDownPayments + monthSavings,
+          netSavings: monthIncome - monthExpenses - monthEMI - monthUPI - monthDownPayments - monthSavings,
         });
       }
       setMonthlyData(monthlyChartData);
@@ -444,8 +451,8 @@ const Dashboard = () => {
 
   const savingsAreaSeries = [
     {
-      name: 'Savings',
-      data: monthlyData.map(d => d.savings)
+      name: 'Net Savings',
+      data: monthlyData.map(d => Math.max(0, d.netSavings || 0))
     },
     {
       name: 'Income',
@@ -488,7 +495,7 @@ const Dashboard = () => {
         opacity: 0.5
       }
     },
-    colors: [chartColors.expenses, chartColors.emi, chartColors.upi, chartColors.downPayments],
+    colors: [chartColors.expenses, chartColors.emi, chartColors.upi, chartColors.downPayments, chartColors.savings],
     xaxis: {
       categories: monthlyData.map(d => d.month),
       labels: {
