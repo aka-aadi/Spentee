@@ -48,9 +48,20 @@ app.use(session({
 }));
 
 // Middleware
+// CORS configuration - must allow credentials for cookies to work cross-origin
 app.use(cors({
-  origin: true,
-  credentials: true // Allow cookies to be sent
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // In production, you might want to whitelist specific origins
+    // For now, allow all origins (you can restrict this later)
+    callback(null, true);
+  },
+  credentials: true, // REQUIRED: Allow cookies to be sent cross-origin
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-session-id'],
+  exposedHeaders: ['Set-Cookie']
 }));
 app.use(express.json());
 

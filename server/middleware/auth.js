@@ -135,7 +135,9 @@ const authenticate = async (req, res, next) => {
         hasSession: !!req.session,
         sessionId: req.sessionID,
         hasUserId: !!(req.session && req.session.userId),
-        cookies: req.headers.cookie ? 'present' : 'missing'
+        cookies: req.headers.cookie ? 'present' : 'missing',
+        cookieHeader: req.headers.cookie,
+        sessionData: req.session ? Object.keys(req.session) : 'no session'
       });
       
       if (!req.session || !req.session.userId) {
