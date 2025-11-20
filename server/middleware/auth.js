@@ -8,7 +8,6 @@ const authenticate = async (req, res, next) => {
     // Check for session ID in custom header (for React Native)
     if (req.headers['x-session-id']) {
       sessionId = req.headers['x-session-id'];
-      console.log('Authenticating with session ID:', sessionId);
       
       // Load session by ID using promise
       const session = await new Promise((resolve, reject) => {
@@ -17,17 +16,12 @@ const authenticate = async (req, res, next) => {
             console.error('Session store get error:', err);
             reject(err);
           } else {
-            console.log('Session retrieved:', session ? 'found' : 'not found');
-            if (session) {
-              console.log('Session userId:', session.userId);
-            }
             resolve(session);
           }
         });
       });
 
       if (!session || !session.userId) {
-        console.log('Session invalid or missing userId');
         return res.status(401).json({ message: 'Not authenticated. Please login again.' });
       }
 
@@ -117,7 +111,6 @@ const authenticate = async (req, res, next) => {
       const user = await User.findById(session.userId).select('-password');
       
       if (!user) {
-        console.log('User not found for session userId:', session.userId);
         // User was deleted but session still exists - destroy session
         await new Promise((resolve) => {
           req.sessionStore.destroy(sessionId, resolve);
@@ -127,21 +120,10 @@ const authenticate = async (req, res, next) => {
 
       // Attach user to request object
       req.user = user;
-      console.log('Authentication successful for user:', user.username);
       next();
     } else {
       // Cookie-based session (web)
-      console.log('Cookie-based session check:', {
-        hasSession: !!req.session,
-        sessionId: req.sessionID,
-        hasUserId: !!(req.session && req.session.userId),
-        cookies: req.headers.cookie ? 'present' : 'missing',
-        cookieHeader: req.headers.cookie,
-        sessionData: req.session ? Object.keys(req.session) : 'no session'
-      });
-      
       if (!req.session || !req.session.userId) {
-        console.log('Cookie session invalid or missing userId');
         return res.status(401).json({ message: 'Not authenticated. Please login again.' });
       }
 
@@ -149,7 +131,6 @@ const authenticate = async (req, res, next) => {
       const user = await User.findById(req.session.userId).select('-password');
       
       if (!user) {
-        console.log('User not found for session userId:', req.session.userId);
         // User was deleted but session still exists - destroy session
         req.session.destroy();
         return res.status(401).json({ message: 'User not found. Please login again.' });
@@ -157,7 +138,6 @@ const authenticate = async (req, res, next) => {
 
       // Attach user to request object
       req.user = user;
-      console.log('Cookie-based authentication successful for user:', user.username);
       next();
     }
   } catch (error) {

@@ -10,9 +10,7 @@ const UPIPayment = require('../models/UPIPayment');
 // Get comprehensive financial summary
 router.get('/summary', authenticate, async (req, res) => {
   try {
-    console.log('Financial summary request from user:', req.user.username);
     const { startDate, endDate } = req.query;
-    console.log('Date range:', { startDate, endDate });
     
     // Admin users can see all data, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
@@ -21,8 +19,6 @@ router.get('/summary', authenticate, async (req, res) => {
     if (startDate && endDate) {
       dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     }
-
-    console.log('Fetching data with query:', JSON.stringify({ ...query, ...dateQuery }));
 
     // Fetch all data in parallel with optimized queries
     // Use .lean() for read-only queries (faster, returns plain objects)
@@ -65,13 +61,6 @@ router.get('/summary', authenticate, async (req, res) => {
         })
     ]);
 
-    console.log('Data fetched:', {
-      expenses: expenses.length,
-      income: income.length,
-      budgets: budgets.length,
-      emis: emis.length,
-      upiPayments: upiPayments.length
-    });
 
     // Calculate totals
     const totalIncome = income.reduce((sum, inc) => sum + inc.amount, 0);
@@ -208,8 +197,6 @@ router.get('/summary', authenticate, async (req, res) => {
         remainingAfterAll: availableBalance
       }
     });
-    
-    console.log('Financial summary sent successfully');
   } catch (error) {
     console.error('Error in financial summary:', error);
     console.error('Error stack:', error.stack);

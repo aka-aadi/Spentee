@@ -65,19 +65,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Request logging middleware (for debugging)
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`, {
-    headers: {
-      'x-session-id': req.headers['x-session-id'],
-      'content-type': req.headers['content-type'],
-      'cookie': req.headers.cookie ? 'present' : 'missing',
-      'origin': req.headers.origin,
-      'referer': req.headers.referer
-    }
+// Request logging middleware (only in development)
+if (process.env.NODE_ENV === 'development') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
   });
-  next();
-});
+}
 
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)

@@ -62,12 +62,6 @@ router.post('/login', async (req, res) => {
 
     // Get session ID
     const sessionId = req.sessionID;
-    console.log('Session ID:', sessionId);
-    console.log('Session data to save:', {
-      userId: req.session.userId,
-      username: req.session.username,
-      role: req.session.role
-    });
 
     // Save session using promise
     await new Promise((resolve, reject) => {
@@ -76,41 +70,9 @@ router.post('/login', async (req, res) => {
           console.error('Session save error:', err);
           reject(err);
         } else {
-          console.log('Session saved successfully, ID:', req.sessionID);
           resolve();
         }
       });
-    });
-
-    // Verify session was saved by trying to retrieve it (with timeout)
-    try {
-      const savedSession = await Promise.race([
-        new Promise((resolve, reject) => {
-          req.sessionStore.get(sessionId, (err, session) => {
-            if (err) reject(err);
-            else resolve(session);
-          });
-        }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session verification timeout')), 2000)
-        )
-      ]);
-
-      if (!savedSession) {
-        console.error('WARNING: Session not found in store after save!');
-      } else {
-        console.log('Session verified in store, userId:', savedSession.userId);
-      }
-    } catch (verifyError) {
-      console.error('Error verifying session save:', verifyError.message);
-      // Continue anyway - session might still be saved
-    }
-
-    // Log cookie information for debugging
-    console.log('Login response - Cookie info:', {
-      sessionId: sessionId,
-      cookieHeader: res.getHeader('Set-Cookie'),
-      cookiesInRequest: req.headers.cookie ? 'present' : 'missing'
     });
 
     // Return session ID for React Native (since cookies don't work well)
