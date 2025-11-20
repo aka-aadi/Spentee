@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { FiDollarSign, FiCreditCard, FiSmartphone, FiTrendingUp, FiPiggyBank } from 'react-icons/fi';
+import { FiDollarSign, FiCreditCard, FiSmartphone, FiTrendingUp, FiSave } from 'react-icons/fi';
 import './Transactions.css';
 
 const Transactions = () => {
@@ -120,7 +120,7 @@ const Transactions = () => {
           description: saving.description || 'Savings',
           date: saving.date,
           createdAt: saving.createdAt || saving.date,
-          icon: FiPiggyBank,
+          icon: FiSave,
           color: '#3b82f6'
         }))
       ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by creation timestamp (newest first - reverse order)
