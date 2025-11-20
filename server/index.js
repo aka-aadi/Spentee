@@ -36,10 +36,12 @@ app.use(session({
   saveUninitialized: false,
   store: sessionStore,
   cookie: {
-    secure: process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true', // Use secure cookies in production (HTTPS required)
+    // For production (Render + Netlify both HTTPS), we need secure: true and sameSite: 'none'
+    // For local development, you can set FORCE_SECURE_COOKIES=false to use lax
+    secure: process.env.FORCE_SECURE_COOKIES !== 'false', // Default to true (required for cross-origin with sameSite: 'none')
     httpOnly: true, // Prevent client-side JavaScript access
     maxAge: sessionMaxAge,
-    sameSite: process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true' ? 'none' : 'lax', // 'none' for cross-origin (requires secure: true), 'lax' for same-origin
+    sameSite: process.env.FORCE_SECURE_COOKIES === 'false' ? 'lax' : 'none', // 'none' for cross-origin (requires secure: true)
     domain: undefined // Don't restrict domain - let browser handle it
   },
   name: 'spentee.sid' // Custom session name
