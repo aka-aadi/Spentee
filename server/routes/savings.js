@@ -48,6 +48,27 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
+// Update saving
+router.put('/:id', authenticate, async (req, res) => {
+  try {
+    // Admin users can update any saving, regular users can only update their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const saving = await Saving.findOneAndUpdate(
+      query,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!saving) {
+      return res.status(404).json({ message: 'Saving not found' });
+    }
+    res.json(saving);
+  } catch (error) {
+    res.status(400).json({ message: 'Error updating saving', error: error.message });
+  }
+});
+
 // Delete saving
 router.delete('/:id', authenticate, async (req, res) => {
   try {
