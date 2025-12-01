@@ -64,6 +64,12 @@ const Dashboard = () => {
 
       const { income, expenses, emis, balance, savings } = financialSummary.data;
       const { income: allIncome, expenses: allExpenses, emis: allEMIs, savings: allSavings } = allDataSummary.data;
+      
+      // Ensure all items arrays exist
+      if (!allIncome?.items) allIncome.items = [];
+      if (!allExpenses?.items) allExpenses.items = [];
+      if (!allEMIs?.items) allEMIs.items = [];
+      if (!allSavings?.items) allSavings.items = [];
 
       // Check if any EMI excludes down payment from balance
       const hasExcludedDownPayments = emis.items.some(emi => 
@@ -112,33 +118,41 @@ const Dashboard = () => {
       // Generate monthly chart data (last 6 months)
       const monthlyChartData = [];
       for (let i = 5; i >= 0; i--) {
-        const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+        // Calculate the target month/year properly handling negative months
+        const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthYear = targetDate.getFullYear();
+        const monthIndex = targetDate.getMonth();
+        
+        // Helper function to check if date is in month (ignoring time)
+        const isInMonth = (dateStr) => {
+          if (!dateStr) return false;
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) return false;
+          const dateYear = date.getFullYear();
+          const dateMonth = date.getMonth();
+          return dateYear === monthYear && dateMonth === monthIndex;
+        };
         
         // Calculate income for this month (from all income data)
         const monthIncome = allIncome.items.filter(inc => {
-          const incDate = new Date(inc.date);
-          return incDate >= month && incDate <= monthEnd;
+          return isInMonth(inc.date);
         }).reduce((sum, inc) => sum + inc.amount, 0);
 
         // Calculate expenses for this month (from all expenses data)
         const monthExpenses = allExpenses.items.filter(exp => {
-          const expDate = new Date(exp.date);
-          return expDate >= month && expDate <= monthEnd;
+          return isInMonth(exp.date);
         }).reduce((sum, exp) => sum + exp.amount, 0);
 
         // Calculate UPI payments for this month
         const monthUPI = allUPIPayments.filter(upi => {
-          const upiDate = new Date(upi.date);
-          return upiDate >= month && upiDate <= monthEnd;
+          return isInMonth(upi.date);
         }).reduce((sum, upi) => sum + upi.amount, 0);
 
         // Calculate down payments for this month
         const monthDownPayments = allEMIs.items.filter(emi => {
-          const emiStartDate = new Date(emi.startDate);
-          return emiStartDate >= month && emiStartDate <= monthEnd && 
-                 (emi.includeDownPaymentInBalance !== false) && 
-                 (emi.downPayment || 0) > 0;
+          if (!emi.downPayment || emi.downPayment <= 0) return false;
+          if (emi.includeDownPaymentInBalance === false) return false;
+          return isInMonth(emi.startDate);
         }).reduce((sum, emi) => sum + (emi.downPayment || 0), 0);
 
         // Calculate EMI for this month (only count EMIs that were PAID in this month)
@@ -146,16 +160,14 @@ const Dashboard = () => {
           const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
           // Count how many payments were made in this month
           const paymentsInMonth = paidMonthDates.filter(paidDate => {
-            const paid = new Date(paidDate);
-            return paid >= month && paid <= monthEnd;
+            return isInMonth(paidDate);
           }).length;
           return sum + (paymentsInMonth * emi.monthlyEMI);
         }, 0);
 
         // Calculate savings for this month
-        const monthSavings = allSavings?.items?.filter(saving => {
-          const savingDate = new Date(saving.date);
-          return savingDate >= month && savingDate <= monthEnd;
+        const monthSavings = (allSavings?.items || []).filter(saving => {
+          return isInMonth(saving.date);
         }).reduce((sum, saving) => sum + saving.amount, 0) || 0;
 
         monthlyChartData.push({
