@@ -171,7 +171,7 @@ const Dashboard = () => {
         }).reduce((sum, saving) => sum + saving.amount, 0) || 0;
 
         monthlyChartData.push({
-          month: format(month, 'MMM'),
+          month: format(targetDate, 'MMM'),
           income: monthIncome,
           expenses: monthExpenses,
           emi: monthEMI,
