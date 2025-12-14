@@ -125,6 +125,13 @@ router.get('/summary', authenticate, async (req, res) => {
     const totalIncome = incomeTotal.total;
     const totalExpenses = expensesTotal.total;
     
+    console.log(`[BALANCE CALC] User: ${req.user._id} (${req.user.username}) - Cumulative totals:`, {
+      income: cumulativeIncome,
+      expenses: cumulativeExpenses,
+      upi: cumulativeUPI,
+      savings: cumulativeSavings
+    });
+    
     // Calculate totals for date range (for monthly breakdown) - use aggregated totals
     // Only count successful UPI payments (already filtered in query)
     const totalUPI = upiPayments.reduce((sum, upi) => sum + upi.amount, 0);
@@ -162,6 +169,8 @@ router.get('/summary', authenticate, async (req, res) => {
     let cumulativeTotalEMI = 0;
     let cumulativeTotalDownPayments = 0;
     
+    console.log(`[BALANCE CALC] User: ${req.user._id} - Processing ${allEMIsForBalance.length} EMIs for balance calculation`);
+    
     allEMIsForBalance.forEach(emi => {
       const emiStartDate = new Date(emi.startDate);
       const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
@@ -177,6 +186,12 @@ router.get('/summary', authenticate, async (req, res) => {
       
       // Count ALL paid EMIs (all-time, not just current month)
       cumulativeTotalEMI += (paidMonthDates.length * emi.monthlyEMI);
+    });
+    
+    console.log(`[BALANCE CALC] User: ${req.user._id} - EMI totals:`, {
+      cumulativeEMI: cumulativeTotalEMI,
+      cumulativeDownPayments: cumulativeTotalDownPayments,
+      emiCount: allEMIsForBalance.length
     });
     
     const totalBudget = budgets.reduce((sum, budget) => {
@@ -196,6 +211,20 @@ router.get('/summary', authenticate, async (req, res) => {
     // This ensures balance carries over from previous months
     // Use cumulative EMIs and down payments (all-time) instead of current month only
     const availableBalance = cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments - cumulativeUPI - cumulativeSavings;
+    
+    console.log(`[BALANCE CALC] User: ${req.user._id} - Available Balance Calculation:`, {
+      formula: 'Income - Expenses - EMIs - DownPayments - UPI - Savings',
+      values: {
+        cumulativeIncome,
+        cumulativeExpenses,
+        cumulativeTotalEMI,
+        cumulativeTotalDownPayments,
+        cumulativeUPI,
+        cumulativeSavings
+      },
+      calculation: `${cumulativeIncome} - ${cumulativeExpenses} - ${cumulativeTotalEMI} - ${cumulativeTotalDownPayments} - ${cumulativeUPI} - ${cumulativeSavings}`,
+      result: availableBalance
+    });
 
     // Use aggregation for faster category calculations
     const [expenseCategoryTotals, upiCategoryTotals, incomeTypeTotals] = await Promise.all([
