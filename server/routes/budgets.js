@@ -22,43 +22,49 @@ router.get('/', authenticate, async (req, res) => {
       return res.json([]);
     }
     
-    // Build base query for expenses and UPI payments
-    const baseQuery = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    
-    // Fetch all expenses and UPI payments once (optimized with .lean())
-    const [allExpenses, allUPIPayments] = await Promise.all([
-      Expense.find(baseQuery).lean().select('category date amount userId'),
-      UPIPayment.find({ ...baseQuery, status: 'Success' }).lean().select('category date amount userId')
-    ]);
-    
-    // Calculate spent amount for each budget (in-memory calculation - much faster)
-    const budgetsWithSpent = budgets.map(budget => {
-      // Filter expenses for this budget's category and date range
-      const budgetExpenses = allExpenses.filter(exp => 
-        exp.category === budget.category &&
-        new Date(exp.date) >= new Date(budget.startDate) &&
-        new Date(exp.date) <= new Date(budget.endDate)
-      );
-      
-      // Filter UPI payments for this budget's category and date range
-      const budgetUPI = allUPIPayments.filter(upi => 
-        upi.category === budget.category &&
-        new Date(upi.date) >= new Date(budget.startDate) &&
-        new Date(upi.date) <= new Date(budget.endDate)
-      );
-      
-      // Calculate totals
-      const expenseTotal = budgetExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-      const upiTotal = budgetUPI.reduce((sum, upi) => sum + upi.amount, 0);
-      const spent = expenseTotal + upiTotal;
-      
-      return {
-        ...budget,
-        spent,
-        remaining: budget.amount - spent,
-        percentageUsed: budget.amount > 0 ? (spent / budget.amount) * 100 : 0
-      };
-    });
+    // Use aggregation for MUCH faster calculation - calculate spent per budget using database aggregation
+    // This is significantly faster than fetching all expenses/UPI and filtering in memory
+    const budgetsWithSpent = await Promise.all(
+      budgets.map(async (budget) => {
+        const baseQuery = req.user.role === 'admin' ? {} : { userId: req.user._id };
+        
+        // Use aggregation to calculate totals for this specific budget's date range and category
+        const [expenseResult, upiResult] = await Promise.all([
+          Expense.aggregate([
+            {
+              $match: {
+                ...baseQuery,
+                category: budget.category,
+                date: { $gte: new Date(budget.startDate), $lte: new Date(budget.endDate) }
+              }
+            },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]),
+          UPIPayment.aggregate([
+            {
+              $match: {
+                ...baseQuery,
+                category: budget.category,
+                status: 'Success',
+                date: { $gte: new Date(budget.startDate), $lte: new Date(budget.endDate) }
+              }
+            },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ])
+        ]);
+        
+        const expenseTotal = expenseResult.length > 0 ? expenseResult[0].total : 0;
+        const upiTotal = upiResult.length > 0 ? upiResult[0].total : 0;
+        const spent = expenseTotal + upiTotal;
+        
+        return {
+          ...budget,
+          spent,
+          remaining: budget.amount - spent,
+          percentageUsed: budget.amount > 0 ? (spent / budget.amount) * 100 : 0
+        };
+      })
+    );
     
     res.json(budgetsWithSpent);
   } catch (error) {

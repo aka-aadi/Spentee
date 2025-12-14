@@ -6,11 +6,54 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    trim: true
+    trim: true,
+    lowercase: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address']
   },
   password: {
     type: String,
-    required: true
+    required: true,
+    minlength: 6
+  },
+  profilePicture: {
+    type: String,
+    default: null
+  },
+  accountDetails: {
+    fullName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    phoneNumber: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: ''
+    }
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationToken: {
+    type: String,
+    default: null
   },
   role: {
     type: String,

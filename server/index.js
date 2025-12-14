@@ -89,8 +89,10 @@ mongoose.connect(MONGODB_URI)
       if (!adminExists) {
         const admin = new User({
           username: adminUsername,
+          email: process.env.ADMIN_EMAIL || `${adminUsername}@spentee.com`,
           password: adminPassword,
-          role: 'admin'
+          role: 'admin',
+          emailVerified: true
         });
         await admin.save();
         console.log(`✅ Admin user "${adminUsername}" created successfully`);
@@ -119,6 +121,7 @@ mongoose.connect(MONGODB_URI)
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/upload', require('./routes/upload'));
 app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/income', require('./routes/income'));
 app.use('/api/budgets', require('./routes/budgets'));

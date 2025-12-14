@@ -1,5 +1,6 @@
 const express = require('express');
 const User = require('../models/User');
+const crypto = require('crypto');
 const router = express.Router();
 
 // Initialize admin user
@@ -18,8 +19,10 @@ router.post('/init', async (req, res) => {
     if (!adminExists) {
       const admin = new User({
         username: adminUsername,
+        email: process.env.ADMIN_EMAIL || `${adminUsername}@spentee.com`,
         password: adminPassword,
-        role: 'admin'
+        role: 'admin',
+        emailVerified: true
       });
       await admin.save();
       return res.json({ message: 'Admin user created successfully' });
@@ -36,6 +39,98 @@ router.post('/init', async (req, res) => {
   }
 });
 
+// Register new user
+router.post('/register', async (req, res) => {
+  try {
+    const { username, email, password, fullName } = req.body;
+
+    // Validation
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: 'Username, email, and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
+
+    // Email validation
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({
+      $or: [{ username: username.toLowerCase() }, { email: email.toLowerCase() }]
+    });
+
+    if (existingUser) {
+      if (existingUser.username === username.toLowerCase()) {
+        return res.status(400).json({ message: 'Username already exists' });
+      }
+      if (existingUser.email === email.toLowerCase()) {
+        return res.status(400).json({ message: 'Email already registered' });
+      }
+    }
+
+    // Generate email verification token
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+
+    // Create new user
+    const user = new User({
+      username: username.toLowerCase(),
+      email: email.toLowerCase(),
+      password,
+      accountDetails: {
+        fullName: fullName || ''
+      },
+      emailVerificationToken,
+      emailVerified: false // In production, require email verification
+    });
+
+    await user.save();
+
+    // Auto-login after registration (create session)
+    req.session.userId = user._id.toString();
+    req.session.username = user.username;
+    req.session.role = user.role;
+
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const sessionId = req.sessionID;
+
+    res.status(201).json({
+      success: true,
+      message: 'Account created successfully',
+      sessionId: sessionId,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        accountDetails: user.accountDetails,
+        emailVerified: user.emailVerified,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    if (error.code === 11000) {
+      // Duplicate key error
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        message: `${field === 'username' ? 'Username' : 'Email'} already exists` 
+      });
+    }
+    res.status(500).json({ message: 'Error creating account', error: error.message });
+  }
+});
+
 // Login - creates server-side session
 router.post('/login', async (req, res) => {
   try {
@@ -45,7 +140,13 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Username and password are required' });
     }
 
-    const user = await User.findOne({ username });
+    // Login can use either username or email
+    const user = await User.findOne({
+      $or: [
+        { username: username.toLowerCase() },
+        { email: username.toLowerCase() }
+      ]
+    });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -84,6 +185,10 @@ router.post('/login', async (req, res) => {
       user: {
         id: user._id.toString(),
         username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        accountDetails: user.accountDetails,
+        emailVerified: user.emailVerified,
         role: user.role
       }
     });
@@ -141,12 +246,70 @@ router.get('/me', async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        accountDetails: user.accountDetails,
+        emailVerified: user.emailVerified,
         role: user.role
       }
     });
   } catch (error) {
     console.error('Auth check error:', error);
     res.status(500).json({ message: 'Error checking authentication', error: error.message });
+  }
+});
+
+// Update user profile
+router.put('/profile', async (req, res) => {
+  try {
+    let session = req.session;
+    
+    // Support session ID header for React Native
+    if (req.headers['x-session-id'] && !session?.userId) {
+      const sessionId = req.headers['x-session-id'];
+      session = await new Promise((resolve, reject) => {
+        req.sessionStore.get(sessionId, (err, sess) => {
+          if (err) reject(err);
+          else resolve(sess);
+        });
+      });
+    }
+
+    if (!session || !session.userId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const user = await User.findById(session.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update allowed fields
+    const { fullName, phoneNumber, dateOfBirth, address, profilePicture } = req.body;
+
+    if (fullName !== undefined) user.accountDetails.fullName = fullName;
+    if (phoneNumber !== undefined) user.accountDetails.phoneNumber = phoneNumber;
+    if (dateOfBirth !== undefined) user.accountDetails.dateOfBirth = dateOfBirth;
+    if (address !== undefined) user.accountDetails.address = address;
+    if (profilePicture !== undefined) user.profilePicture = profilePicture;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        accountDetails: user.accountDetails,
+        emailVerified: user.emailVerified,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 });
 

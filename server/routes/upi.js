@@ -8,9 +8,16 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all UPI payments, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const upiPayments = await UPIPayment.find(query)
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    let upiQuery = UPIPayment.find(query)
       .lean() // Use lean() for read-only queries - much faster
       .sort({ date: -1 });
+    
+    if (limit) {
+      upiQuery = upiQuery.limit(limit);
+    }
+    
+    const upiPayments = await upiQuery;
     res.json(upiPayments);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching UPI payments', error: error.message });

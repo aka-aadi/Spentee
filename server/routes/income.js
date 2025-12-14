@@ -8,9 +8,16 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all income, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const income = await Income.find(query)
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    let incomeQuery = Income.find(query)
       .lean() // Use lean() for read-only queries - much faster
       .sort({ date: -1 });
+    
+    if (limit) {
+      incomeQuery = incomeQuery.limit(limit);
+    }
+    
+    const income = await incomeQuery;
     res.json(income);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching income', error: error.message });

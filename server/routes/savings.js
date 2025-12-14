@@ -8,9 +8,16 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all savings, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const savings = await Saving.find(query)
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    let savingsQuery = Saving.find(query)
       .lean() // Use lean() for read-only queries - much faster
       .sort({ date: -1 });
+    
+    if (limit) {
+      savingsQuery = savingsQuery.limit(limit);
+    }
+    
+    const savings = await savingsQuery;
     res.json(savings);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching savings', error: error.message });

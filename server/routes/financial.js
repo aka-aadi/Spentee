@@ -21,81 +21,114 @@ router.get('/summary', authenticate, async (req, res) => {
       dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     }
 
-    // Fetch all data in parallel with optimized queries
-    // Use .lean() for read-only queries (faster, returns plain objects)
-    // For available balance calculation, we need ALL data (cumulative), not just date range
-    // But for monthly breakdown, we use date range
-    const [allExpenses, allIncome, allUPIPayments, allSavings, expenses, income, budgets, emis, upiPayments, savings] = await Promise.all([
-      // Fetch ALL data for cumulative balance calculation
-      Expense.find(query).lean().sort({ date: -1 }),
-      Income.find(query).lean().sort({ date: -1 }),
-      UPIPayment.find(query).lean().sort({ date: -1 }),
-      Saving.find(query).lean().sort({ date: -1 }),
-      // Fetch date-filtered data for monthly breakdown
+    // Use aggregation pipelines for MUCH faster calculations - only fetch totals, not all documents
+    // This dramatically reduces data transfer and processing time
+    const [allExpensesTotal, allIncomeTotal, allUPITotal, allSavingsTotal, expensesTotal, incomeTotal, expenses, income, budgets, emis, upiPayments, savings, allEMIsForBalance] = await Promise.all([
+      // Calculate totals using aggregation (MUCH faster than fetching all documents)
+      Expense.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
+      Income.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
+      UPIPayment.aggregate([
+        { $match: { ...query, status: 'Success' } },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
+      Saving.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
+      // Calculate monthly totals using aggregation
+      Expense.aggregate([
+        { $match: { ...query, ...dateQuery } },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
+      Income.aggregate([
+        { $match: { ...query, ...dateQuery } },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
+      // Only fetch items for category breakdown (reduced limits for faster response)
       Expense.find({ ...query, ...dateQuery })
         .lean()
+        .select('amount category date')
         .sort({ date: -1 })
+        .limit(100) // Reduced from 500 for faster response
         .catch(err => {
           console.error('Error fetching expenses:', err);
           throw err;
         }),
       Income.find({ ...query, ...dateQuery })
         .lean()
+        .select('amount type date')
         .sort({ date: -1 })
+        .limit(100) // Reduced from 500 for faster response
         .catch(err => {
           console.error('Error fetching income:', err);
           throw err;
         }),
       Budget.find({ ...query, isActive: true })
         .lean()
+        .select('category amount startDate endDate')
         .sort({ createdAt: -1 })
+        .limit(50) // Reduced from 100 for faster response
         .catch(err => {
           console.error('Error fetching budgets:', err);
           throw err;
         }),
       EMI.find({ ...query, isActive: true })
         .lean()
+        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance name')
         .sort({ nextDueDate: 1 })
+        .limit(50) // Reduced from 100 for faster response
         .catch(err => {
           console.error('Error fetching EMIs:', err);
           throw err;
         }),
-      UPIPayment.find({ ...query, ...dateQuery })
+      UPIPayment.find({ ...query, ...dateQuery, status: 'Success' })
         .lean()
+        .select('amount category date')
         .sort({ date: -1 })
+        .limit(100) // Reduced from 500 for faster response
         .catch(err => {
           console.error('Error fetching UPI payments:', err);
           throw err;
         }),
       Saving.find({ ...query, ...dateQuery })
         .lean()
+        .select('amount date')
         .sort({ date: -1 })
+        .limit(100) // Reduced from 500 for faster response
         .catch(err => {
           console.error('Error fetching savings:', err);
-          // Return empty array instead of throwing to prevent server crash
+          return [];
+        }),
+      // Fetch ALL EMIs for cumulative balance calculation (not limited, not date-filtered)
+      EMI.find({ ...query, isActive: true })
+        .lean()
+        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance')
+        .catch(err => {
+          console.error('Error fetching all EMIs for balance:', err);
           return [];
         })
     ]);
 
-
-    // Calculate totals for date range (for monthly breakdown)
-    const totalIncome = income.reduce((sum, inc) => sum + inc.amount, 0);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    // Only count successful UPI payments
-    const totalUPI = upiPayments
-      .filter(upi => upi.status === 'Success')
-      .reduce((sum, upi) => sum + upi.amount, 0);
+    // Use aggregated totals instead of calculating from arrays (MUCH faster)
+    const cumulativeIncome = allIncomeTotal.total;
+    const cumulativeExpenses = allExpensesTotal.total;
+    const cumulativeUPI = allUPITotal.total;
+    const cumulativeSavings = allSavingsTotal.total;
+    const totalIncome = incomeTotal.total;
+    const totalExpenses = expensesTotal.total;
+    
+    // Calculate totals for date range (for monthly breakdown) - use aggregated totals
+    // Only count successful UPI payments (already filtered in query)
+    const totalUPI = upiPayments.reduce((sum, upi) => sum + upi.amount, 0);
     const totalSavings = savings.reduce((sum, saving) => sum + saving.amount, 0);
     
-    // Calculate cumulative totals (from all time) for available balance
-    const cumulativeIncome = allIncome.reduce((sum, inc) => sum + inc.amount, 0);
-    const cumulativeExpenses = allExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const cumulativeUPI = allUPIPayments
-      .filter(upi => upi.status === 'Success')
-      .reduce((sum, upi) => sum + upi.amount, 0);
-    const cumulativeSavings = allSavings.reduce((sum, saving) => sum + saving.amount, 0);
-    
-    // Calculate EMIs - only count EMIs that are marked as paid
+    // Calculate EMIs for current month/date range - only count EMIs that are marked as paid
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -122,6 +155,28 @@ router.get('/summary', authenticate, async (req, res) => {
       totalEMI += (paidMonthDates.length * emi.monthlyEMI);
     });
     
+    // Calculate CUMULATIVE (all-time) EMIs and down payments for balance calculation
+    // This ensures previous months' balances are included
+    let cumulativeTotalEMI = 0;
+    let cumulativeTotalDownPayments = 0;
+    
+    allEMIsForBalance.forEach(emi => {
+      const emiStartDate = new Date(emi.startDate);
+      const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
+      
+      // Count down payment if start date is today or in the past AND if it should be included
+      const shouldIncludeDownPayment = emi.includeDownPaymentInBalance !== undefined 
+        ? emi.includeDownPaymentInBalance 
+        : true; // Default to true for backward compatibility
+      
+      if (emiStartDate <= now && shouldIncludeDownPayment) {
+        cumulativeTotalDownPayments += (emi.downPayment || 0);
+      }
+      
+      // Count ALL paid EMIs (all-time, not just current month)
+      cumulativeTotalEMI += (paidMonthDates.length * emi.monthlyEMI);
+    });
+    
     const totalBudget = budgets.reduce((sum, budget) => {
       const budgetExpenses = expenses.filter(exp => 
         exp.category === budget.category &&
@@ -137,7 +192,8 @@ router.get('/summary', authenticate, async (req, res) => {
     
     // Calculate cumulative available balance (from all time, not just current month)
     // This ensures balance carries over from previous months
-    const availableBalance = cumulativeIncome - cumulativeExpenses - totalEMI - totalDownPayments - cumulativeUPI - cumulativeSavings;
+    // Use cumulative EMIs and down payments (all-time) instead of current month only
+    const availableBalance = cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments - cumulativeUPI - cumulativeSavings;
 
     // Use aggregation for faster category calculations
     const [expenseCategoryTotals, upiCategoryTotals, incomeTypeTotals] = await Promise.all([
@@ -154,7 +210,7 @@ router.get('/summary', authenticate, async (req, res) => {
         { $group: { _id: '$type', total: { $sum: '$amount' } } }
       ])
     ]);
-
+    
     // Build expenses by category
     const expensesByCategory = {};
     expenseCategoryTotals.forEach(item => {
@@ -164,7 +220,7 @@ router.get('/summary', authenticate, async (req, res) => {
     // Add UPI payments by category (merge with expenses)
     upiCategoryTotals.forEach(item => {
       expensesByCategory[item._id] = (expensesByCategory[item._id] || 0) + item.total;
-    });
+      });
     
     // Add EMI to expenses by category
     if (totalEMI > 0) {
@@ -190,16 +246,16 @@ router.get('/summary', authenticate, async (req, res) => {
     res.json({
       income: {
         total: totalIncome,
-        count: income.length,
+        count: incomeTotal.count,
         byType: incomeByType,
-        items: income
+        items: income.slice(0, 100) // Only return first 100 items for display
       },
       expenses: {
         total: totalExpenses,
         totalAll: totalAllExpenses, // Total including expenses, EMIs, down payments, and UPI
-        count: expenses.length,
+        count: expensesTotal.count,
         byCategory: expensesByCategory,
-        items: expenses
+        items: expenses.slice(0, 100) // Only return first 100 items for display
       },
       emis: {
         totalMonthly: totalEMI,

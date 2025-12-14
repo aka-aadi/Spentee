@@ -8,9 +8,16 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all expenses, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
-    const expenses = await Expense.find(query)
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    let expensesQuery = Expense.find(query)
       .lean() // Use lean() for read-only queries - much faster
       .sort({ date: -1 });
+    
+    if (limit) {
+      expensesQuery = expensesQuery.limit(limit);
+    }
+    
+    const expenses = await expensesQuery;
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching expenses', error: error.message });

@@ -88,21 +88,21 @@ const Dashboard = () => {
           return sum + (paymentsThisMonth * emi.monthlyEMI);
         }, 0);
 
-        setStats({
-          totalIncome: income.total,
+      setStats({
+        totalIncome: income.total,
           totalExpenses: expenses.total + currentMonthPaidEMI + (balance.totalUPI || 0) + (savings?.total || 0), // Only include paid EMIs
-          activeEMIs: emis.count,
-          monthlyIncome: income.total,
+        activeEMIs: emis.count,
+        monthlyIncome: income.total,
           monthlyExpenses: expenses.total + currentMonthPaidEMI + (balance.totalUPI || 0) + (savings?.total || 0),
           monthlyEMI: currentMonthPaidEMI, // Only paid EMIs
-          totalDownPayments: balance.totalDownPayments || 0,
-          totalUPI: balance.totalUPI || 0,
+        totalDownPayments: balance.totalDownPayments || 0,
+        totalUPI: balance.totalUPI || 0,
           totalSavings: savings?.total || 0,
           availableBalance: allDataSummary.data.balance.availableBalance || 0, // Use cumulative balance
-          remainingAfterExpenses: balance.remainingAfterExpenses,
-          hasExcludedDownPayments,
-          nextUpcomingEMI: emis.items.length > 0 ? emis.items[0] : null,
-        });
+        remainingAfterExpenses: balance.remainingAfterExpenses,
+        hasExcludedDownPayments,
+        nextUpcomingEMI: emis.items.length > 0 ? emis.items[0] : null,
+      });
 
       // Include EMI in expenses by category (backend already adds it)
       const categoryData = Object.entries(expenses.byCategory || {}).map(([name, value]) => ({
