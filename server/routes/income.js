@@ -6,10 +6,10 @@ const Income = require('../models/Income');
 // Get all income
 router.get('/', authenticate, async (req, res) => {
   try {
-    // Admin users can see all income, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see all income (shared data)
+    const query = {};
     
-    console.log(`[INCOME GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    console.log(`[INCOME GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query: {} (shared data)`);
     
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
     let incomeQuery = Income.find(query)
@@ -21,7 +21,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     
     const income = await incomeQuery;
-    console.log(`[INCOME GET] Found ${income.length} income records for user ${req.user._id}`);
+    console.log(`[INCOME GET] Found ${income.length} income records (shared)`);
     res.json(income);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching income', error: error.message });
@@ -31,11 +31,8 @@ router.get('/', authenticate, async (req, res) => {
 // Get income by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can see any income, regular users see only their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
-    const income = await Income.findOne(query);
+    // All users can see any income (shared data)
+    const income = await Income.findById(req.params.id);
     if (!income) {
       return res.status(404).json({ message: 'Income not found' });
     }
@@ -48,16 +45,16 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create income
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
+    // Remove userId from body - data is shared, userId is optional for tracking
     const { userId, ...incomeData } = req.body;
     
-    // Always use the authenticated user's ID
+    // Set userId for tracking who created it, but data is shared
     const income = new Income({
       ...incomeData,
       userId: req.user._id
     });
     
-    console.log(`[INCOME CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
+    console.log(`[INCOME CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
     
     await income.save();
     res.status(201).json(income);
@@ -69,18 +66,13 @@ router.post('/', authenticate, async (req, res) => {
 // Update income
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
+    // Remove userId from body - data is shared, any user can update
     const { userId, ...updateData } = req.body;
     
-    // Admin users can update any income, regular users can only update their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    console.log(`[INCOME UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
     
-    console.log(`[INCOME UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const income = await Income.findOneAndUpdate(
-      query,
+    const income = await Income.findByIdAndUpdate(
+      req.params.id,
       updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
@@ -96,18 +88,14 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete income
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can delete any income, regular users can only delete their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can delete any income (shared data)
+    console.log(`[INCOME DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
     
-    console.log(`[INCOME DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const income = await Income.findOneAndDelete(query);
+    const income = await Income.findByIdAndDelete(req.params.id);
     if (!income) {
       return res.status(404).json({ message: 'Income not found' });
     }
-    console.log(`[INCOME DELETE] Deleted income ${req.params.id} with userId: ${income.userId}`);
+    console.log(`[INCOME DELETE] Deleted income ${req.params.id}`);
     res.json({ message: 'Income deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting income', error: error.message });
@@ -118,8 +106,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // Admin users can see all income, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see all income (shared data)
+    const query = {};
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

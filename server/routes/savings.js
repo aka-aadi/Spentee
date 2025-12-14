@@ -6,10 +6,10 @@ const Saving = require('../models/Saving');
 // Get all savings
 router.get('/', authenticate, async (req, res) => {
   try {
-    // Admin users can see all savings, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see all savings (shared data)
+    const query = {};
     
-    console.log(`[SAVING GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    console.log(`[SAVING GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query: {} (shared data)`);
     
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
     let savingsQuery = Saving.find(query)
@@ -21,7 +21,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     
     const savings = await savingsQuery;
-    console.log(`[SAVING GET] Found ${savings.length} savings for user ${req.user._id}`);
+    console.log(`[SAVING GET] Found ${savings.length} savings (shared)`);
     res.json(savings);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching savings', error: error.message });
@@ -31,11 +31,8 @@ router.get('/', authenticate, async (req, res) => {
 // Get saving by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can see any saving, regular users see only their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
-    const saving = await Saving.findOne(query);
+    // All users can see any saving (shared data)
+    const saving = await Saving.findById(req.params.id);
     if (!saving) {
       return res.status(404).json({ message: 'Saving not found' });
     }
@@ -48,16 +45,16 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create saving
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
+    // Remove userId from body - data is shared, userId is optional for tracking
     const { userId, ...savingData } = req.body;
     
-    // Always use the authenticated user's ID
+    // Set userId for tracking who created it, but data is shared
     const saving = new Saving({
       ...savingData,
       userId: req.user._id
     });
     
-    console.log(`[SAVING CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
+    console.log(`[SAVING CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
     
     await saving.save();
     res.status(201).json(saving);
@@ -69,18 +66,13 @@ router.post('/', authenticate, async (req, res) => {
 // Update saving
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
+    // Remove userId from body - data is shared, any user can update
     const { userId, ...updateData } = req.body;
     
-    // Admin users can update any saving, regular users can only update their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    console.log(`[SAVING UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
     
-    console.log(`[SAVING UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const saving = await Saving.findOneAndUpdate(
-      query,
+    const saving = await Saving.findByIdAndUpdate(
+      req.params.id,
       updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
@@ -96,18 +88,14 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete saving
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can delete any saving, regular users can only delete their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can delete any saving (shared data)
+    console.log(`[SAVING DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
     
-    console.log(`[SAVING DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const saving = await Saving.findOneAndDelete(query);
+    const saving = await Saving.findByIdAndDelete(req.params.id);
     if (!saving) {
       return res.status(404).json({ message: 'Saving not found' });
     }
-    console.log(`[SAVING DELETE] Deleted saving ${req.params.id} with userId: ${saving.userId}`);
+    console.log(`[SAVING DELETE] Deleted saving ${req.params.id}`);
     res.json({ message: 'Saving deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting saving', error: error.message });
@@ -118,8 +106,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // Admin users can see all savings, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see all savings (shared data)
+    const query = {};
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
