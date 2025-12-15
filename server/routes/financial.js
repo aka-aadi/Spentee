@@ -380,28 +380,43 @@ router.get('/summary', authenticate, async (req, res) => {
     
     // Build expenses by category
     const expensesByCategory = {};
+    
+    // First, add regular expenses by category (excluding special categories that will be added separately)
     expenseCategoryTotals.forEach(item => {
-      expensesByCategory[item._id] = item.total;
+      // Skip categories that will be replaced with calculated totals
+      if (item._id !== 'EMI' && item._id !== 'Down Payments' && item._id !== 'Savings') {
+        expensesByCategory[item._id] = item.total;
+      }
     });
     
-    // Add UPI payments by category (merge with expenses)
+    // Add UPI payments by category (merge with expenses, but exclude special categories)
     upiCategoryTotals.forEach(item => {
-      expensesByCategory[item._id] = (expensesByCategory[item._id] || 0) + item.total;
-      });
+      // Skip categories that will be replaced with calculated totals
+      if (item._id !== 'EMI' && item._id !== 'Down Payments' && item._id !== 'Savings') {
+        expensesByCategory[item._id] = (expensesByCategory[item._id] || 0) + item.total;
+      }
+    });
     
-    // Add EMI to expenses by category
+    // Add EMI to expenses by category (replace any existing "EMI" category from expenses/UPI)
     if (totalEMI > 0) {
-      expensesByCategory['EMI'] = (expensesByCategory['EMI'] || 0) + totalEMI;
+      expensesByCategory['EMI'] = totalEMI;
     }
     
-    // Add Down Payments as a separate category if they exist
+    // Add Down Payments as a separate category (replace any existing "Down Payments" category)
     if (totalDownPayments > 0) {
-      expensesByCategory['Down Payments'] = (expensesByCategory['Down Payments'] || 0) + totalDownPayments;
+      expensesByCategory['Down Payments'] = totalDownPayments;
     }
 
-    // Add Savings as a separate category (shown in blue in UI)
+    // Add Savings as a separate category (replace any existing "Savings" category)
     if (totalSavings > 0) {
-      expensesByCategory['Savings'] = (expensesByCategory['Savings'] || 0) + totalSavings;
+      expensesByCategory['Savings'] = totalSavings;
+    }
+    
+    // Verify the sum matches totalAllExpenses
+    const categorySum = Object.values(expensesByCategory).reduce((sum, val) => sum + val, 0);
+    const difference = Math.abs(categorySum - totalAllExpenses);
+    if (difference > 0.01) {
+      console.warn(`[CATEGORY CALC] Sum mismatch: categorySum=${categorySum}, totalAllExpenses=${totalAllExpenses}, difference=${difference}`);
     }
 
     // Build income by type
