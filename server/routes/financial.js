@@ -13,9 +13,23 @@ router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
+    // Determine date range - default to current month if not provided
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
     let dateQuery = {};
+    let dateRangeStart, dateRangeEnd;
+    
     if (startDate && endDate) {
-      dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
+      dateRangeStart = new Date(startDate);
+      dateRangeEnd = new Date(endDate);
+      dateQuery = { date: { $gte: dateRangeStart, $lte: dateRangeEnd } };
+    } else {
+      // Default to current month if no date range specified
+      dateRangeStart = new Date(currentYear, currentMonth, 1);
+      dateRangeEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+      dateQuery = { date: { $gte: dateRangeStart, $lte: dateRangeEnd } };
     }
 
     // Use aggregation pipelines for MUCH faster calculations
@@ -160,21 +174,7 @@ router.get('/summary', authenticate, async (req, res) => {
       dateRange: dateQuery
     });
     
-    // Calculate EMIs for current month/date range - only count EMIs that are marked as paid WITHIN the date range
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    // Determine date range for filtering paid months
-    let dateRangeStart, dateRangeEnd;
-    if (startDate && endDate) {
-      dateRangeStart = new Date(startDate);
-      dateRangeEnd = new Date(endDate);
-    } else {
-      // Default to current month if no date range specified
-      dateRangeStart = new Date(currentYear, currentMonth, 1);
-      dateRangeEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
-    }
+    // Calculate EMIs for current month/date range - use the same date range as expenses
     
     let totalEMI = 0;
     let totalDownPayments = 0;
@@ -410,9 +410,9 @@ router.get('/summary', authenticate, async (req, res) => {
         items: income.slice(0, 100) // Only return first 100 items for display
       },
       expenses: {
-        total: totalAllExpenses, // Total including expenses, EMIs, down payments, UPI, and savings
+        total: totalExpenses, // Regular expenses only (without EMIs, down payments, UPI, savings)
         regularExpenses: totalExpenses, // Just regular expenses (without EMIs, down payments, etc.)
-        totalAll: totalAllExpenses, // Total including expenses, EMIs, down payments, and UPI
+        totalAll: totalAllExpenses, // Total including expenses, EMIs, down payments, UPI, and savings
         count: expensesTotal.count,
         byCategory: expensesByCategory,
         items: expenses.slice(0, 100) // Only return first 100 items for display

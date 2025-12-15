@@ -90,15 +90,16 @@ const Dashboard = () => {
 
       setStats({
         totalIncome: income.total,
-          totalExpenses: expenses.total + currentMonthPaidEMI + (balance.totalUPI || 0) + (savings?.total || 0), // Only include paid EMIs
+        // Show the same total as the donut chart: backend's complete expenses total for the period
+        totalExpenses: expenses.totalAll ?? expenses.total,
         activeEMIs: emis.count,
         monthlyIncome: income.total,
-          monthlyExpenses: expenses.total + currentMonthPaidEMI + (balance.totalUPI || 0) + (savings?.total || 0),
-          monthlyEMI: currentMonthPaidEMI, // Only paid EMIs
+        monthlyExpenses: expenses.totalAll ?? expenses.total,
+        monthlyEMI: currentMonthPaidEMI, // Paid EMIs this month (for info only)
         totalDownPayments: balance.totalDownPayments || 0,
         totalUPI: balance.totalUPI || 0,
-          totalSavings: savings?.total || 0,
-          availableBalance: allDataSummary.data.balance.availableBalance || 0, // Use cumulative balance
+        totalSavings: savings?.total || 0,
+        availableBalance: allDataSummary.data.balance.availableBalance || 0, // Use cumulative balance
         remainingAfterExpenses: balance.remainingAfterExpenses,
         hasExcludedDownPayments,
         nextUpcomingEMI: emis.items.length > 0 ? emis.items[0] : null,
