@@ -4,7 +4,12 @@ const upiPaymentSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    // NOTE:
+    // We previously required userId for strict per-user data isolation.
+    // Registration & isolation are currently disabled, and routes no longer
+    // attach userId on create, which caused validation errors when saving.
+    // Make this optional so UPI payments can be created/updated without userId.
+    required: false
   },
   transactionId: {
     type: String,

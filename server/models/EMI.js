@@ -4,7 +4,8 @@ const emiSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    // Optional while data isolation is disabled
+    required: false,
     index: true
   },
   name: {

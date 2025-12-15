@@ -4,7 +4,10 @@ const expenseSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    // Was required when per-user isolation was enabled.
+    // Registration & isolation are currently disabled and routes no longer
+    // attach userId, so keep this optional to avoid save validation errors.
+    required: false,
     index: true
   },
   amount: {

@@ -4,7 +4,8 @@ const incomeSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    // Optional while data is shared and routes don't set userId
+    required: false,
     index: true
   },
   amount: {
