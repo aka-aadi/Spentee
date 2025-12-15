@@ -130,11 +130,36 @@ router.get('/summary', authenticate, async (req, res) => {
 
     // Use aggregated totals instead of calculating from arrays (MUCH faster)
     const cumulativeIncome = allIncomeTotal.total;
-    const cumulativeExpenses = allExpensesTotal.total;
+    const cumulativeExpensesRaw = allExpensesTotal.total;
     const cumulativeUPI = allUPITotal.total;
     const cumulativeSavings = allSavingsTotal.total;
     const totalIncome = incomeTotal.total;
     const totalExpenses = expensesTotal.total;
+    
+    // Exclude "Down Payments" category from cumulative expenses to prevent double-counting
+    // Down payments are calculated separately from EMIs
+    const allExpensesDownPayments = await Expense.aggregate([
+      { $match: { category: 'Down Payments' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]).then(result => result[0]?.total || 0);
+    
+    const allUPIDownPayments = await UPIPayment.aggregate([
+      { $match: { category: 'Down Payments', status: 'Success' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]).then(result => result[0]?.total || 0);
+    
+    const allDownPaymentsFromCategories = allExpensesDownPayments + allUPIDownPayments;
+    const cumulativeExpenses = cumulativeExpensesRaw - allDownPaymentsFromCategories;
+    
+    if (allDownPaymentsFromCategories > 0) {
+      console.log(`[BALANCE CALC] Excluding "Down Payments" category from cumulative expenses:`, {
+        rawExpenses: cumulativeExpensesRaw,
+        downPaymentsFromExpenses: allExpensesDownPayments,
+        downPaymentsFromUPI: allUPIDownPayments,
+        totalDownPaymentsFromCategories: allDownPaymentsFromCategories,
+        adjustedExpenses: cumulativeExpenses
+      });
+    }
     
     // Verify aggregation totals by manually calculating (for debugging)
     const manualIncomeTotal = income.reduce((sum, inc) => sum + (inc.amount || 0), 0);
@@ -173,6 +198,24 @@ router.get('/summary', authenticate, async (req, res) => {
     // Only count successful UPI payments (already filtered in query)
     const totalUPI = upiPayments.reduce((sum, upi) => sum + (upi.amount || 0), 0);
     const totalSavings = savings.reduce((sum, saving) => sum + (saving.amount || 0), 0);
+    
+    // Check if there are any expenses or UPI payments with category "Down Payments" that would cause double-counting
+    // These should be excluded from totalExpenses since down payments are calculated separately from EMIs
+    const downPaymentsFromExpenses = expenses
+      .filter(exp => exp.category === 'Down Payments')
+      .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const downPaymentsFromUPI = upiPayments
+      .filter(upi => upi.category === 'Down Payments')
+      .reduce((sum, upi) => sum + (upi.amount || 0), 0);
+    const totalDownPaymentsFromCategories = downPaymentsFromExpenses + downPaymentsFromUPI;
+    
+    if (totalDownPaymentsFromCategories > 0) {
+      console.warn(`[WARNING] Found expenses/UPI with "Down Payments" category (${totalDownPaymentsFromCategories}). Excluding from totalExpenses to prevent double-counting.`);
+    }
+    
+    // Adjust totalExpenses to exclude any "Down Payments" category expenses/UPI
+    // since down payments are calculated separately from EMIs
+    const adjustedTotalExpenses = totalExpenses - totalDownPaymentsFromCategories;
     
     console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Monthly aggregated totals:`, {
       income: totalIncome,
@@ -317,14 +360,20 @@ router.get('/summary', authenticate, async (req, res) => {
 
     // Calculate total expenses (expenses + down payments + EMIs + UPI payments + savings)
     // This is the complete monthly expense including all obligations
-    const totalAllExpenses = totalExpenses + totalEMI + totalDownPayments + totalUPI + totalSavings;
+    // IMPORTANT: Down payments should only be counted ONCE - from EMI calculation
+    // If there are expenses/UPI with category "Down Payments", they are excluded from totalExpenses
+    // to prevent double-counting (we use the EMI-calculated down payments instead)
+    const totalAllExpenses = adjustedTotalExpenses + totalEMI + totalDownPayments + totalUPI + totalSavings;
     
     console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Complete monthly expense breakdown:`, {
       regularExpenses: totalExpenses,
+      downPaymentsFromCategories: totalDownPaymentsFromCategories,
+      adjustedTotalExpenses: adjustedTotalExpenses,
       emis: totalEMI,
       downPayments: totalDownPayments,
       upi: totalUPI,
       savings: totalSavings,
+      calculation: `${adjustedTotalExpenses} + ${totalEMI} + ${totalDownPayments} + ${totalUPI} + ${totalSavings}`,
       totalAllExpenses
     });
     
@@ -433,8 +482,8 @@ router.get('/summary', authenticate, async (req, res) => {
         items: income.slice(0, 100) // Only return first 100 items for display
       },
       expenses: {
-        total: totalExpenses, // Regular expenses only (without EMIs, down payments, UPI, savings)
-        regularExpenses: totalExpenses, // Just regular expenses (without EMIs, down payments, etc.)
+        total: adjustedTotalExpenses, // Regular expenses (excluding any "Down Payments" category to prevent double-counting)
+        regularExpenses: totalExpenses, // Original total expenses before adjustment
         totalAll: totalAllExpenses, // Total including expenses, EMIs, down payments, UPI, and savings
         count: expensesTotal.count,
         byCategory: expensesByCategory,
