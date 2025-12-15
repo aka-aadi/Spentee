@@ -13,12 +13,31 @@ router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    // For the main summary:
-    // - When a date range is provided, use that range (monthly view)
-    // - When no range is provided, use ALL data (all‑time summary)
+    // Determine date range for calculations
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
     let dateQuery = {};
+    let dateRangeStart, dateRangeEnd;
+    
+    // Always initialize dateRangeStart and dateRangeEnd
     if (startDate && endDate) {
-      dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
+      dateRangeStart = new Date(startDate);
+      dateRangeEnd = new Date(endDate);
+      dateQuery = { date: { $gte: dateRangeStart, $lte: dateRangeEnd } };
+    } else {
+      // When no date range provided, use current month for EMI calculations
+      // But use empty dateQuery for aggregations to get all data
+      dateRangeStart = new Date(currentYear, currentMonth, 1);
+      dateRangeEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+      // dateQuery remains empty {} for all-time aggregations
+    }
+    
+    // Ensure variables are always defined
+    if (!dateRangeStart || !dateRangeEnd) {
+      dateRangeStart = new Date(currentYear, currentMonth, 1);
+      dateRangeEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
     }
 
     // Use aggregation pipelines for MUCH faster calculations
