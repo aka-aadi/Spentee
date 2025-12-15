@@ -131,43 +131,119 @@ router.get('/summary', authenticate, async (req, res) => {
     const totalIncome = incomeTotal.total;
     const totalExpenses = expensesTotal.total;
     
+    // Verify aggregation totals by manually calculating (for debugging)
+    const manualIncomeTotal = income.reduce((sum, inc) => sum + (inc.amount || 0), 0);
+    const manualExpensesTotal = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+    const manualUPITotal = upiPayments.reduce((sum, upi) => sum + (upi.amount || 0), 0);
+    const manualSavingsTotal = savings.reduce((sum, sav) => sum + (sav.amount || 0), 0);
+    
     console.log(`[BALANCE CALC] User: ${req.user._id} (${req.user.username}) - Cumulative totals:`, {
-      income: cumulativeIncome,
-      expenses: cumulativeExpenses,
-      upi: cumulativeUPI,
-      savings: cumulativeSavings
+      income: {
+        aggregated: cumulativeIncome,
+        fromItems: manualIncomeTotal,
+        itemCount: income.length,
+        match: Math.abs(cumulativeIncome - manualIncomeTotal) < 0.01
+      },
+      expenses: {
+        aggregated: cumulativeExpenses,
+        fromItems: manualExpensesTotal,
+        itemCount: expenses.length,
+        match: Math.abs(cumulativeExpenses - manualExpensesTotal) < 0.01
+      },
+      upi: {
+        aggregated: cumulativeUPI,
+        fromItems: manualUPITotal,
+        itemCount: upiPayments.length,
+        match: Math.abs(cumulativeUPI - manualUPITotal) < 0.01
+      },
+      savings: {
+        aggregated: cumulativeSavings,
+        fromItems: manualSavingsTotal,
+        itemCount: savings.length,
+        match: Math.abs(cumulativeSavings - manualSavingsTotal) < 0.01
+      }
     });
     
     // Calculate totals for date range (for monthly breakdown) - use aggregated totals
     // Only count successful UPI payments (already filtered in query)
-    const totalUPI = upiPayments.reduce((sum, upi) => sum + upi.amount, 0);
-    const totalSavings = savings.reduce((sum, saving) => sum + saving.amount, 0);
+    const totalUPI = upiPayments.reduce((sum, upi) => sum + (upi.amount || 0), 0);
+    const totalSavings = savings.reduce((sum, saving) => sum + (saving.amount || 0), 0);
     
-    // Calculate EMIs for current month/date range - only count EMIs that are marked as paid
+    console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Monthly aggregated totals:`, {
+      income: totalIncome,
+      expenses: totalExpenses,
+      upi: totalUPI,
+      savings: totalSavings,
+      dateRange: dateQuery
+    });
+    
+    // Calculate EMIs for current month/date range - only count EMIs that are marked as paid WITHIN the date range
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
     
+    // Determine date range for filtering paid months
+    let dateRangeStart, dateRangeEnd;
+    if (startDate && endDate) {
+      dateRangeStart = new Date(startDate);
+      dateRangeEnd = new Date(endDate);
+    } else {
+      // Default to current month if no date range specified
+      dateRangeStart = new Date(currentYear, currentMonth, 1);
+      dateRangeEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+    }
+    
     let totalEMI = 0;
     let totalDownPayments = 0;
     
-    emis.forEach(emi => {
+    console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Date range for monthly totals:`, {
+      start: dateRangeStart.toISOString(),
+      end: dateRangeEnd.toISOString(),
+      emiCount: emis.length
+    });
+    
+    emis.forEach((emi, index) => {
       const emiStartDate = new Date(emi.startDate);
       const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
       
       // EMI starts from next month after start date
       // Count down payment if start date is today or in the past AND if it should be included
+      // AND if the start date falls within the date range
       const shouldIncludeDownPayment = emi.includeDownPaymentInBalance !== undefined 
         ? emi.includeDownPaymentInBalance 
         : true; // Default to true for backward compatibility
       
-      if (emiStartDate <= now && shouldIncludeDownPayment) {
+      // Only count down payment if it falls within the date range
+      if (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd && shouldIncludeDownPayment) {
         totalDownPayments += (emi.downPayment || 0);
       }
       
-      // Only count EMI amounts for months that are marked as paid
-      // Count each paid month's EMI
-      totalEMI += (paidMonthDates.length * emi.monthlyEMI);
+      // Only count EMI amounts for months that are marked as paid WITHIN the date range
+      const paidMonthsInRange = paidMonthDates.filter(paidDate => {
+        const paid = new Date(paidDate);
+        return paid >= dateRangeStart && paid <= dateRangeEnd;
+      });
+      
+      const emiAmountForRange = paidMonthsInRange.length * emi.monthlyEMI;
+      totalEMI += emiAmountForRange;
+      
+      if (emiAmountForRange > 0 || (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd)) {
+        console.log(`[MONTHLY CALC] EMI ${index + 1}/${emis.length}:`, {
+          name: emi.name || 'Unnamed',
+          monthlyEMI: emi.monthlyEMI,
+          totalPaidMonths: paidMonthDates.length,
+          paidMonthsInRange: paidMonthsInRange.length,
+          emiAmountForRange,
+          downPayment: (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd && shouldIncludeDownPayment) ? (emi.downPayment || 0) : 0
+        });
+      }
+    });
+    
+    console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Monthly totals:`, {
+      totalEMI,
+      totalDownPayments,
+      totalExpenses,
+      totalIncome
     });
     
     // Calculate CUMULATIVE (all-time) EMIs and down payments for balance calculation
@@ -183,7 +259,7 @@ router.get('/summary', authenticate, async (req, res) => {
       console.error(`[BALANCE CALC ERROR] Found ${wrongUserEMIs.length} EMIs from other users! User: ${req.user._id}, Wrong EMIs:`, wrongUserEMIs.map(e => ({ id: e._id, userId: e.userId })));
     }
     
-    allEMIsForBalance.forEach(emi => {
+    allEMIsForBalance.forEach((emi, index) => {
       // Double-check userId matches (safety check)
       if (emi.userId && emi.userId.toString() !== req.user._id.toString()) {
         console.error(`[BALANCE CALC ERROR] Skipping EMI ${emi._id} - belongs to user ${emi.userId}, not ${req.user._id}`);
@@ -198,15 +274,32 @@ router.get('/summary', authenticate, async (req, res) => {
         ? emi.includeDownPaymentInBalance 
         : true; // Default to true for backward compatibility
       
+      let downPaymentAdded = 0;
       if (emiStartDate <= now && shouldIncludeDownPayment) {
-        cumulativeTotalDownPayments += (emi.downPayment || 0);
+        downPaymentAdded = (emi.downPayment || 0);
+        cumulativeTotalDownPayments += downPaymentAdded;
       }
       
       // Count ALL paid EMIs (all-time, not just current month)
       // Only count if there are actually paid months
+      let emiAmountAdded = 0;
       if (paidMonthDates.length > 0) {
-        cumulativeTotalEMI += (paidMonthDates.length * emi.monthlyEMI);
+        emiAmountAdded = (paidMonthDates.length * emi.monthlyEMI);
+        cumulativeTotalEMI += emiAmountAdded;
       }
+      
+      // Log each EMI's contribution for debugging
+      console.log(`[BALANCE CALC] EMI ${index + 1}/${allEMIsForBalance.length}:`, {
+        id: emi._id,
+        name: emi.name || 'Unnamed',
+        monthlyEMI: emi.monthlyEMI,
+        downPayment: emi.downPayment || 0,
+        paidMonths: paidMonthDates.length,
+        emiContribution: emiAmountAdded,
+        downPaymentContribution: downPaymentAdded,
+        includeDownPayment: shouldIncludeDownPayment,
+        startDate: emiStartDate.toISOString()
+      });
     });
     
     console.log(`[BALANCE CALC] User: ${req.user._id} - EMI totals:`, {
@@ -238,17 +331,32 @@ router.get('/summary', authenticate, async (req, res) => {
     // Use cumulative EMIs and down payments (all-time) instead of current month only
     const availableBalance = cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments - cumulativeUPI - cumulativeSavings;
     
-    console.log(`[BALANCE CALC] User: ${req.user._id} - Available Balance Calculation:`, {
+    // Detailed breakdown for debugging
+    const breakdown = {
+      income: cumulativeIncome,
+      expenses: cumulativeExpenses,
+      emis: cumulativeTotalEMI,
+      downPayments: cumulativeTotalDownPayments,
+      upi: cumulativeUPI,
+      savings: cumulativeSavings,
+      subtotalAfterExpenses: cumulativeIncome - cumulativeExpenses,
+      subtotalAfterEMIs: cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI,
+      subtotalAfterDownPayments: cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments,
+      subtotalAfterUPI: cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments - cumulativeUPI,
+      finalBalance: availableBalance
+    };
+    
+    console.log(`[BALANCE CALC] User: ${req.user._id} (${req.user.username}) - Available Balance Calculation:`, {
       formula: 'Income - Expenses - EMIs - DownPayments - UPI - Savings',
-      values: {
-        cumulativeIncome,
-        cumulativeExpenses,
-        cumulativeTotalEMI,
-        cumulativeTotalDownPayments,
-        cumulativeUPI,
-        cumulativeSavings
-      },
-      calculation: `${cumulativeIncome} - ${cumulativeExpenses} - ${cumulativeTotalEMI} - ${cumulativeTotalDownPayments} - ${cumulativeUPI} - ${cumulativeSavings}`,
+      breakdown,
+      stepByStep: [
+        `Starting Income: ₹${cumulativeIncome.toFixed(2)}`,
+        `Subtract Expenses: ₹${cumulativeIncome.toFixed(2)} - ₹${cumulativeExpenses.toFixed(2)} = ₹${(cumulativeIncome - cumulativeExpenses).toFixed(2)}`,
+        `Subtract EMIs: ₹${(cumulativeIncome - cumulativeExpenses).toFixed(2)} - ₹${cumulativeTotalEMI.toFixed(2)} = ₹${(cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI).toFixed(2)}`,
+        `Subtract Down Payments: ₹${(cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI).toFixed(2)} - ₹${cumulativeTotalDownPayments.toFixed(2)} = ₹${(cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments).toFixed(2)}`,
+        `Subtract UPI: ₹${(cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments).toFixed(2)} - ₹${cumulativeUPI.toFixed(2)} = ₹${(cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments - cumulativeUPI).toFixed(2)}`,
+        `Subtract Savings: ₹${(cumulativeIncome - cumulativeExpenses - cumulativeTotalEMI - cumulativeTotalDownPayments - cumulativeUPI).toFixed(2)} - ₹${cumulativeSavings.toFixed(2)} = ₹${availableBalance.toFixed(2)}`
+      ],
       result: availableBalance
     });
 
