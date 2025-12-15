@@ -45,6 +45,8 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password, fullName } = req.body;
 
+    console.log(`[REGISTER] New registration attempt - Username: ${username}, Email: ${email}`);
+
     // Validation
     if (!username || !email || !password) {
       return res.status(400).json({ message: 'Username, email, and password are required' });
@@ -60,6 +62,13 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Please provide a valid email address' });
     }
 
+    // Prevent registration with admin username
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    if (username.toLowerCase() === adminUsername.toLowerCase()) {
+      console.error(`[REGISTER] Attempt to register with admin username blocked: ${username}`);
+      return res.status(400).json({ message: 'This username is reserved and cannot be used' });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ username: username.toLowerCase() }, { email: email.toLowerCase() }]
@@ -67,9 +76,11 @@ router.post('/register', async (req, res) => {
 
     if (existingUser) {
       if (existingUser.username === username.toLowerCase()) {
+        console.log(`[REGISTER] Username already exists: ${username}`);
         return res.status(400).json({ message: 'Username already exists' });
       }
       if (existingUser.email === email.toLowerCase()) {
+        console.log(`[REGISTER] Email already registered: ${email}`);
         return res.status(400).json({ message: 'Email already registered' });
       }
     }
@@ -82,6 +93,7 @@ router.post('/register', async (req, res) => {
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
 
     // Create new user (not verified yet)
+    // IMPORTANT: This only creates a new user document - it does NOT modify any existing data
     const user = new User({
       username: username.toLowerCase(),
       email: email.toLowerCase(),
@@ -92,10 +104,12 @@ router.post('/register', async (req, res) => {
       emailVerificationToken,
       emailVerificationOTP: otp,
       emailVerificationOTPExpiry: otpExpiry,
-      emailVerified: false
+      emailVerified: false,
+      role: 'user' // Explicitly set role to 'user' (not admin)
     });
 
     await user.save();
+    console.log(`[REGISTER] New user created successfully - ID: ${user._id}, Username: ${user.username}, Email: ${user.email}`);
 
     // Send OTP email
     const emailResult = await sendOTPEmail(email.toLowerCase(), otp);
